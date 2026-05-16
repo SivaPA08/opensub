@@ -1,18 +1,19 @@
 <script lang="ts">
     import { invoke } from "@tauri-apps/api/core";
-    let name = $state("");
+    import { videoPath } from "../store.js";
 
     //uploading file
     let videoFile = $state<File | null>(null);
     let wordPerFrame = $state<number>(3);
-    let videUrl = $state<string>("");
+    // let videUrl = $state<string>("");
 
     function handleFileUpload(event: Event) {
         const input = event.target as HTMLInputElement;
         const file = input.files?.[0];
         if (file) {
             videoFile = file;
-            videUrl = URL.createObjectURL(file);
+            //setting video path to store.js
+            videoPath.set(URL.createObjectURL(file));
         }
     }
     function handelWordsPerFrame(event: Event) {
@@ -22,5 +23,7 @@
 </script>
 
 <main class="cont">
-    <h1>Welcome to Opensub</h1>
+    <h1>Welcome to OpenSub</h1>
+    <!-- File Uploading -->
+    <input type="file" accept="video/*" onchange={handleFileUpload} />
 </main>
