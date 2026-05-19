@@ -1,4 +1,5 @@
 <script lang="ts">
+    import { goto } from "$app/navigation";
     import { videoPath } from "../store.js";
 
     //uploading file
@@ -19,6 +20,13 @@
         const input = event.target as HTMLInputElement;
         wordPerFrame = Number(input.value);
     }
+    async function generate() {
+        if (!videoFile || !wordPerFrame) {
+            alert("Upload video file or write the no of words per frame");
+            return;
+        }
+        await goto("/loading");
+    }
 </script>
 
 <main class="cont">
@@ -26,4 +34,5 @@
     <!-- File Uploading -->
     <input type="file" accept="video/*" onchange={handleFileUpload} />
     <input type="number" onchange={handelWordsPerFrame} />
+    <button onclick={generate}>Generate</button>
 </main>
