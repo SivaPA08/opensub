@@ -9,19 +9,23 @@ struct PyResponse {
 }
 
 #[tauri::command]
-fn run_python(name: String, count: i32) -> Result<PyResponse, String> {
-    let output = Command::new("python3")
-        .arg("../backend/main.py")
-        .arg(name)
-        .arg(count.to_string())
-        .output()
-        .map_err(|e| e.to_string())?;
+async fn run_python(name: String, count: i32) -> Result<PyResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let output = Command::new("python3")
+            .arg("../backend/main.py")
+            .arg(name)
+            .arg(count.to_string())
+            .output()
+            .map_err(|e| e.to_string())?;
 
-    let text = String::from_utf8_lossy(&output.stdout);
+        let text = String::from_utf8_lossy(&output.stdout);
 
-    let res: PyResponse = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+        let res: PyResponse = serde_json::from_str(&text).map_err(|e| e.to_string())?;
 
-    Ok(res)
+        Ok(res)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
