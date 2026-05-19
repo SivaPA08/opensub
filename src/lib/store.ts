@@ -9,3 +9,4 @@ export interface Subtitle {
     content: string;
 }
 export const subtitle = writable<Subtitle[]>([])
+export const wordPerFrame = writable<number>(-1)
