@@ -1,10 +1,9 @@
 <script lang="ts">
-    import { invoke } from "@tauri-apps/api/core";
     import { videoPath } from "../store.js";
 
     //uploading file
     let videoFile = $state<File | null>(null);
-    let wordPerFrame = $state<number>(3);
+    // let wordPerFrame = $state<number>(3);
     // let videUrl = $state<string>("");
 
     function handleFileUpload(event: Event) {
@@ -16,10 +15,10 @@
             videoPath.set(URL.createObjectURL(file));
         }
     }
-    function handelWordsPerFrame(event: Event) {
-        const input = event.target as HTMLInputElement;
-        wordPerFrame = Number(input.value);
-    }
+    // function handelWordsPerFrame(event: Event) {
+    //     const input = event.target as HTMLInputElement;
+    //     wordPerFrame = Number(input.value);
+    // }
 </script>
 
 <main class="cont">
