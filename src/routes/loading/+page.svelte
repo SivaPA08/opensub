@@ -23,6 +23,7 @@
             });
             if (sub.status === "ok") {
                 subtitle.set(sub.message as Subtitle[]);
+                console.log(sub.message);
                 await goto("/editor");
             } else {
                 alert(sub.message as string);
