@@ -27,9 +27,12 @@ async fn run_python(name: String, count: i32) -> Result<PyResponse, String> {
     .await
     .map_err(|e| e.to_string())?
 }
+use tauri::ipc::Response;
+
 #[tauri::command]
-fn get_video_bytes(path: String) -> Result<Vec<u8>, String> {
-    std::fs::read(&path).map_err(|e| e.to_string())
+async fn get_video_bytes(path: String) -> Result<Response, String> {
+    let bytes = tokio::fs::read(&path).await.map_err(|e| e.to_string())?;
+    Ok(Response::new(bytes))
 }
 
 #[tauri::command]

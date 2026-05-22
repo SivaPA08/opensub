@@ -10,6 +10,8 @@
     "opener:default",
     "dialog:default",
     "fs:default",
+    "fs:allow-read-file",
+    "fs:allow-exists",
     "fs:allow-home-read-recursive"
   ]
 }
