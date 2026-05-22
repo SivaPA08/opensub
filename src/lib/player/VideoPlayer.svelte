@@ -2,75 +2,52 @@
     import { videoPath } from "../store.js";
     import { invoke } from "@tauri-apps/api/core";
 
-    let src: string | null = null;
+    let videoSrc = "";
+    let errorMessage = "";
     let loading = false;
     let loaded = false;
-    let errorMessage: string | null = null;
     let prevPath = "";
-
-    function getMimeType(path: string) {
-        const ext = path.split(".").pop()?.toLowerCase();
-        switch (ext) {
-            case "mp4":
-                return "video/mp4";
-            case "webm":
-                return "video/webm";
-            case "ogg":
-            case "ogv":
-                return "video/ogg";
-            case "mov":
-                return "video/quicktime";
-            case "avi":
-                return "video/x-msvideo";
-            case "mkv":
-                return "video/x-matroska";
-            default:
-                return "video/mp4"; // Fallback to avoid empty MIME types being rejected
-        }
-    }
 
     $: if ($videoPath && $videoPath !== prevPath) {
         prevPath = $videoPath;
         loading = true;
+        errorMessage = "";
         loaded = false;
-        errorMessage = null;
-        src = null;
-        invoke<ArrayBuffer | Uint8Array | number[]>("get_video_bytes", {
-            path: $videoPath,
-        })
-            .then((data) => {
-                const mimeType = getMimeType($videoPath);
-                let buffer: ArrayBuffer | Uint8Array;
-                if (data instanceof Uint8Array || data instanceof ArrayBuffer) {
-                    buffer = data;
-                } else if (Array.isArray(data)) {
-                    buffer = new Uint8Array(data);
-                } else {
-                    buffer = data as any;
-                }
-                const blob = new Blob([buffer as any], { type: mimeType });
-                if (src) URL.revokeObjectURL(src);
-                src = URL.createObjectURL(blob);
+        videoSrc = "";
+        invoke<string>("get_streaming_url", { path: $videoPath })
+            .then((url) => {
+                videoSrc = url;
             })
-            .catch((e) => {
-                console.error("Failed loading video:", e, { path: $videoPath });
-                src = null;
-                errorMessage = "Cannot load video file from disk.";
+            .catch((err) => {
+                console.error("Failed to start video stream:", err);
+                errorMessage = "Failed to initialize local HTTP streaming server.";
             })
-            .finally(() => (loading = false));
+            .finally(() => {
+                loading = false;
+            });
+    } else if (!$videoPath) {
+        videoSrc = "";
+        prevPath = "";
     }
 </script>
 
 {#if loading}
-    <div class="placeholder">Loading video...</div>
+    <div class="placeholder animate-fade-in">
+        <div class="spinner"></div>
+        <span class="loading-text">Preparing seamless local stream...</span>
+    </div>
 {:else if errorMessage}
-    <div class="placeholder error">{errorMessage}</div>
-{:else if src}
-    <div class="video-wrapper">
+    <div class="placeholder error animate-fade-in">
+        <span class="error-icon">⚠️</span>
+        <span class="error-text">{errorMessage}</span>
+    </div>
+{:else if videoSrc}
+    <div class="video-wrapper animate-fade-in">
         <!-- svelte-ignore a11y_media_has_caption -->
         <video
-            {src}
+            src={videoSrc}
             controls
+            autoplay
             preload="metadata"
             class="video"
             on:loadedmetadata={() => {
@@ -86,62 +63,151 @@
                 console.log("video can play through");
             }}
             on:error={(event) => {
-                const mediaError = (event.currentTarget as HTMLVideoElement)
-                    .error;
-                console.error("Video element error:", mediaError, "Src:", src);
-                errorMessage = `Playback failed: ${mediaError ? mediaError.message : "file may be unsupported or corrupted."} (Code: ${mediaError ? mediaError.code : "unknown"})\nURL: ${src}`;
+                const mediaError = (event.currentTarget as HTMLVideoElement).error;
+                console.error("Video element error:", mediaError);
+                errorMessage = `Playback failed: ${mediaError ? mediaError.message : "file may be unsupported or corrupted."}`;
                 loaded = false;
-                src = null;
+                videoSrc = "";
             }}
         >
             <track kind="captions" />
         </video>
         <div class="status">
             {#if loaded}
-                Video loaded successfully.
+                <span class="success-dot"></span> Streaming high-quality local media
             {:else}
-                Loading video...
+                <div class="mini-spinner"></div> Buffering video stream...
             {/if}
         </div>
     </div>
 {:else}
-    <div class="placeholder">No video selected</div>
+    <div class="placeholder animate-fade-in">
+        <span class="placeholder-icon">🎬</span>
+        <span>Select a video file to begin</span>
+    </div>
 {/if}
 
 <style>
     .video-wrapper {
         width: 100%;
-        max-height: 90vh;
+        max-height: 85vh;
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid #2a2a2a;
+        background: #000000;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.7);
     }
+    
     .video {
         width: 100%;
-        max-height: 90vh;
+        max-height: 80vh;
         object-fit: contain;
         display: block;
     }
+    
     .placeholder {
         width: 100%;
         aspect-ratio: 16/9;
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
-        color: #666;
+        gap: 1.25rem;
+        color: #888888;
         font-size: 14px;
-        border: 1px dashed #444;
-        border-radius: 4px;
-        background: #000;
-        position: relative;
-        z-index: 1;
+        font-weight: 500;
+        border: 1px dashed #333333;
+        border-radius: 12px;
+        background: #111111;
+        transition: border-color 0.25s, background-color 0.25s;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
     }
+    
+    .placeholder:hover {
+        border-color: #555555;
+        background: #141414;
+    }
+    
     .placeholder.error {
-        color: #ffb3b3;
-        border-color: #ff6b6b;
-        background: #210000;
+        color: #ff6b6b;
+        border-color: #551a1a;
+        background: #1a0808;
     }
-    .status {
-        margin-top: 0.75rem;
+    
+    .placeholder-icon {
+        font-size: 2.25rem;
+        opacity: 0.8;
+    }
+    
+    .error-icon {
+        font-size: 2.25rem;
+    }
+
+    .loading-text {
         color: #a8a8a8;
-        font-size: 0.9rem;
-        text-align: center;
+        letter-spacing: 0.02em;
+    }
+    
+    .spinner {
+        width: 32px;
+        height: 32px;
+        border: 3px solid #222222;
+        border-top-color: #ffffff;
+        border-radius: 50%;
+        animation: spin 0.8s cubic-bezier(0.5, 0.1, 0.4, 0.9) infinite;
+    }
+
+    .mini-spinner {
+        width: 12px;
+        height: 12px;
+        border: 2px solid #222222;
+        border-top-color: #888888;
+        border-radius: 50%;
+        display: inline-block;
+        margin-right: 6px;
+        vertical-align: middle;
+        animation: spin 0.8s linear infinite;
+    }
+    
+    @keyframes spin {
+        to { transform: rotate(360deg); }
+    }
+    
+    .status {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.75rem 1rem;
+        background: #111111;
+        border-top: 1px solid #1f1f1f;
+        color: #999999;
+        font-size: 0.8rem;
+        font-weight: 500;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .success-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #00e676;
+        display: inline-block;
+        margin-right: 8px;
+        box-shadow: 0 0 10px rgba(0, 230, 118, 0.6);
+    }
+    
+    .animate-fade-in {
+        animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
+    }
+    
+    @keyframes fadeIn {
+        from { 
+            opacity: 0; 
+            transform: scale(0.98) translateY(4px); 
+        }
+        to { 
+            opacity: 1; 
+            transform: scale(1) translateY(0); 
+        }
     }
 </style>
