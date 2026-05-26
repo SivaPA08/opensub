@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
+    import { videoDuration, videoCurrentTime } from "../store.js";
 
     type Clip = {
         id: number;
@@ -179,6 +180,47 @@
 
         resize = null;
     }
+
+    let isDraggingPlayhead = false;
+
+    function startPlayheadDrag(e: MouseEvent): void {
+        e.stopPropagation();
+        e.preventDefault();
+        isDraggingPlayhead = true;
+
+        window.addEventListener("mousemove", movePlayhead);
+        window.addEventListener("mouseup", stopPlayheadDrag);
+    }
+
+    function movePlayhead(e: MouseEvent): void {
+        if (!isDraggingPlayhead || !tracksRef) return;
+
+        const rect = tracksRef.getBoundingClientRect();
+        const scrollLeft = tracksRef.scrollLeft;
+
+        const canvasX = e.clientX - rect.left + scrollLeft;
+        const timelineX = canvasX - 120; // 120px label offset
+
+        let newTime = timelineX / zoom;
+        const duration = $videoDuration || 120;
+        newTime = Math.max(0, Math.min(duration, newTime));
+
+        $videoCurrentTime = newTime;
+    }
+
+    function stopPlayheadDrag(): void {
+        isDraggingPlayhead = false;
+        window.removeEventListener("mousemove", movePlayhead);
+        window.removeEventListener("mouseup", stopPlayheadDrag);
+    }
+
+    function formatTime(seconds: number): string {
+        if (isNaN(seconds) || seconds === Infinity) return "00:00.0";
+        const m = Math.floor(seconds / 60).toString().padStart(2, "0");
+        const s = Math.floor(seconds % 60).toString().padStart(2, "0");
+        const ms = Math.floor((seconds % 1) * 10).toString();
+        return `${m}:${s}.${ms}`;
+    }
 </script>
 
 <div class="timeline">
@@ -190,35 +232,53 @@
         <span>
             {zoom.toFixed(1)}x
         </span>
+
+        <div class="time-display">
+            <span class="current">{formatTime($videoCurrentTime)}</span>
+            <span class="separator">/</span>
+            <span class="duration">{formatTime($videoDuration)}</span>
+        </div>
     </div>
 
     <div class="ruler" bind:this={rulerRef}>
         <div class="left-space"></div>
 
-        <div class="ruler-content">
-            {#each Array(120) as _, i}
+        <div class="ruler-content" style="width: {($videoDuration || 120) * zoom}px;">
+            {#each Array(Math.ceil(($videoDuration || 120) / 60)) as _, i}
                 <div
                     class="tick"
                     style="
 						width:{60 * zoom}px
 					"
                 >
-                    00:
-                    {i.toString().padStart(2, "0")}
-                    :00
+                    {Math.floor((i * 60) / 3600).toString().padStart(2, "0")}:
+                    {Math.floor(((i * 60) % 3600) / 60).toString().padStart(2, "0")}:00
                 </div>
             {/each}
         </div>
     </div>
 
     <div class="tracks" bind:this={tracksRef}>
+        <!-- Playhead Tracker Line and Drag Handle -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
+        <div 
+            class="playhead" 
+            style="left: {($videoCurrentTime * zoom) + 120}px;"
+        >
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div 
+                class="playhead-handle" 
+                on:mousedown={startPlayheadDrag}
+            ></div>
+        </div>
+
         {#each tracks as track}
             <div class="track">
                 <div class="label">
                     Track {track + 1}
                 </div>
 
-                <div class="content">
+                <div class="content" style="width: {($videoDuration || 120) * zoom}px;">
                     {#each clips.filter((c) => c.track === track) as clip}
                         <!-- svelte-ignore a11y_no_static_element_interactions -->
                         <div
@@ -317,8 +377,6 @@
     .ruler-content {
         display: flex;
 
-        width: 10000px;
-
         flex-shrink: 0;
     }
 
@@ -342,6 +400,8 @@
 	========================= */
 
     .tracks {
+        position: relative;
+
         flex: 1;
 
         overflow-x: auto;
@@ -395,8 +455,6 @@
 
     .content {
         position: relative;
-
-        width: 10000px;
 
         height: 100%;
 
@@ -533,5 +591,77 @@
 
     .tracks::-webkit-scrollbar-thumb:hover {
         background: #3b465c;
+    }
+
+    /* =========================
+	   PLAYHEAD TRACKER
+	========================= */
+    .playhead {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 2px;
+        background: #ff4a4a;
+        z-index: 100;
+        pointer-events: none;
+    }
+
+    .playhead-handle {
+        position: absolute;
+        top: 0;
+        left: -8px;
+        width: 16px;
+        height: 16px;
+        background: #ff4a4a;
+        border-radius: 50% 50% 50% 0;
+        transform: rotate(-45deg);
+        cursor: grab;
+        pointer-events: auto;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.1s ease, background-color 0.1s ease;
+    }
+
+    .playhead-handle:hover {
+        background: #ff6b6b;
+        transform: rotate(-45deg) scale(1.1);
+    }
+
+    .playhead-handle:active {
+        cursor: grabbing;
+        background: #e63939;
+        transform: rotate(-45deg) scale(1.15);
+    }
+
+    /* =========================
+	   TIME DISPLAY
+	========================= */
+    .time-display {
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-family: 'JetBrains Mono', 'Courier New', Courier, monospace;
+        font-size: 13px;
+        color: #8f96a8;
+        background: #1c2130;
+        padding: 4px 10px;
+        border-radius: 6px;
+        border: 1px solid #2a3145;
+    }
+
+    .time-display .current {
+        color: #ffffff;
+        font-weight: 600;
+    }
+
+    .time-display .separator {
+        color: #4a5268;
+    }
+
+    .time-display .duration {
+        color: #8f96a8;
     }
 </style>

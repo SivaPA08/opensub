@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { videoPath } from "../store.js";
+    import { videoPath, videoDuration, videoCurrentTime } from "../store.js";
     import { invoke } from "@tauri-apps/api/core";
 
     let videoSrc = "";
@@ -50,6 +50,8 @@
             autoplay
             preload="metadata"
             class="video"
+            bind:duration={$videoDuration}
+            bind:currentTime={$videoCurrentTime}
             on:loadedmetadata={() => {
                 loaded = true;
                 console.log("video metadata loaded");
