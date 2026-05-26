@@ -137,9 +137,9 @@
         if (!clip) return;
 
         const duration = $videoDuration || 120;
-        let newStart = drag.start + Math.round(dx / zoom);
+        let newStart = drag.start + dx / zoom;
         newStart = Math.max(0, Math.min(duration - clip.length, newStart));
-        clip.start = newStart;
+        clip.start = parseFloat(newStart.toFixed(3));
 
         let newTrack = drag.track + Math.round(dy / 60);
 
@@ -181,7 +181,7 @@
     function resizeMove(e: MouseEvent): void {
         if (!resize) return;
 
-        let dx = Math.round((e.clientX - resize.x) / zoom);
+        let dx = (e.clientX - resize.x) / zoom;
 
         let clip = clips.find((x) => x.id === resize!.id);
 
@@ -191,15 +191,15 @@
         if (resize.side === "right") {
             let newLength = resize.length + dx;
             const maxLength = duration - clip.start;
-            clip.length = Math.max(1, Math.min(maxLength, newLength));
+            clip.length = Math.max(0.1, Math.min(maxLength, parseFloat(newLength.toFixed(3))));
         } else {
             let newStart = resize.start + dx;
 
             let newLength = resize.length - dx;
 
-            if (newLength > 1 && newStart >= 0) {
-                clip.start = newStart;
-                clip.length = newLength;
+            if (newLength > 0.1 && newStart >= 0) {
+                clip.start = parseFloat(newStart.toFixed(3));
+                clip.length = parseFloat(newLength.toFixed(3));
             }
         }
 
