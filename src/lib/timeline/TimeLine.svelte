@@ -29,7 +29,34 @@
         length: number;
     } | null;
 
-    let zoom = 3;
+    let zoom = 10;
+    let prevDuration = 0;
+    $: if ($videoDuration && $videoDuration !== prevDuration) {
+        prevDuration = $videoDuration;
+        if ($videoDuration < 30) {
+            zoom = 50;
+        } else if ($videoDuration < 120) {
+            zoom = 20;
+        } else {
+            zoom = 5;
+        }
+    }
+
+    $: timelineDuration = Math.max(($videoDuration || 120) + 30, 120);
+
+    let lastClampedDuration = 0;
+    $: if ($videoDuration && $videoDuration !== lastClampedDuration) {
+        lastClampedDuration = $videoDuration;
+        clips = clips.map(clip => {
+            let start = Math.min(clip.start, $videoDuration);
+            let length = Math.min(clip.length, $videoDuration - start);
+            if (length < 1) {
+                start = Math.max(0, $videoDuration - 1);
+                length = $videoDuration - start;
+            }
+            return { ...clip, start, length };
+        });
+    }
 
     let tracks: number[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
@@ -109,7 +136,10 @@
 
         if (!clip) return;
 
-        clip.start = Math.max(0, drag.start + Math.round(dx / zoom));
+        const duration = $videoDuration || 120;
+        let newStart = drag.start + Math.round(dx / zoom);
+        newStart = Math.max(0, Math.min(duration - clip.length, newStart));
+        clip.start = newStart;
 
         let newTrack = drag.track + Math.round(dy / 60);
 
@@ -157,14 +187,17 @@
 
         if (!clip) return;
 
+        const duration = $videoDuration || 120;
         if (resize.side === "right") {
-            clip.length = Math.max(20, resize.length + dx);
+            let newLength = resize.length + dx;
+            const maxLength = duration - clip.start;
+            clip.length = Math.max(1, Math.min(maxLength, newLength));
         } else {
             let newStart = resize.start + dx;
 
             let newLength = resize.length - dx;
 
-            if (newLength > 20 && newStart >= 0) {
+            if (newLength > 1 && newStart >= 0) {
                 clip.start = newStart;
                 clip.length = newLength;
             }
@@ -227,7 +260,7 @@
     <div class="zoom-bar">
         <span> Zoom </span>
 
-        <input type="range" min="1" max="20" step="0.5" bind:value={zoom} />
+        <input type="range" min="2" max="150" step="1" bind:value={zoom} />
 
         <span>
             {zoom.toFixed(1)}x
@@ -243,8 +276,8 @@
     <div class="ruler" bind:this={rulerRef}>
         <div class="left-space"></div>
 
-        <div class="ruler-content" style="width: {($videoDuration || 120) * zoom}px;">
-            {#each Array(Math.ceil(($videoDuration || 120) / 60)) as _, i}
+        <div class="ruler-content" style="width: {timelineDuration * zoom}px;">
+            {#each Array(Math.ceil(timelineDuration / 60)) as _, i}
                 <div
                     class="tick"
                     style="
@@ -272,13 +305,23 @@
             ></div>
         </div>
 
+        <!-- End of Video Marker Line -->
+        {#if $videoDuration}
+            <div 
+                class="video-end-line" 
+                style="left: {($videoDuration * zoom) + 120}px;"
+            >
+                <div class="video-end-label">End of Video</div>
+            </div>
+        {/if}
+
         {#each tracks as track}
             <div class="track">
                 <div class="label">
                     Track {track + 1}
                 </div>
 
-                <div class="content" style="width: {($videoDuration || 120) * zoom}px;">
+                <div class="content" style="width: {timelineDuration * zoom}px;">
                     {#each clips.filter((c) => c.track === track) as clip}
                         <!-- svelte-ignore a11y_no_static_element_interactions -->
                         <div
@@ -663,5 +706,36 @@
 
     .time-display .duration {
         color: #8f96a8;
+    }
+
+    /* =========================
+	   VIDEO END MARKER
+	========================= */
+    .video-end-line {
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        width: 0;
+        border-left: 2px dashed #ff4a4a;
+        opacity: 0.55;
+        z-index: 50;
+        pointer-events: none;
+    }
+
+    .video-end-label {
+        position: absolute;
+        top: 6px;
+        left: 6px;
+        font-size: 10px;
+        color: #ff4a4a;
+        background: rgba(21, 25, 37, 0.85);
+        padding: 2px 6px;
+        border-radius: 4px;
+        border: 1px solid rgba(255, 74, 74, 0.35);
+        white-space: nowrap;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        pointer-events: none;
     }
 </style>
