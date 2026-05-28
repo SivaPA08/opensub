@@ -12,3 +12,4 @@ export interface Subtitle {
 }
 export const subtitle = writable<Subtitle[]>([]);
 export const wordPerFrame = writable<number>(-1);
+export const subtitleFontSize = writable(28);

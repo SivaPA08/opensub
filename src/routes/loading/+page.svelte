@@ -22,8 +22,14 @@
                 count: count,
             });
             if (sub.status === "ok") {
-                subtitle.set(sub.message as Subtitle[]);
-                console.log(sub.message);
+                const rawSubs = sub.message as any[];
+                const mapped: Subtitle[] = rawSubs.map((s) => ({
+                    start: s.start,
+                    end: s.end,
+                    content: s.text || s.content || "",
+                }));
+                subtitle.set(mapped);
+                console.log("Mapped Subtitles:", mapped);
                 await goto("/editor");
             } else {
                 alert(sub.message as string);

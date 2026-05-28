@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { videoDuration, videoCurrentTime } from "../store.js";
+    import { videoDuration, videoCurrentTime, subtitle } from "../store.js";
 
     type Clip = {
         id: number;
@@ -33,16 +33,36 @@
     let prevDuration = 0;
     $: if ($videoDuration && $videoDuration !== prevDuration) {
         prevDuration = $videoDuration;
-        if ($videoDuration < 30) {
-            zoom = 50;
-        } else if ($videoDuration < 120) {
-            zoom = 20;
+        // Optimized auto-zoom defaults so that small/word-per-frame clips are beautifully visible initially
+        if ($videoDuration < 15) {
+            zoom = 300;
+        } else if ($videoDuration < 60) {
+            zoom = 150;
+        } else if ($videoDuration < 300) {
+            zoom = 60;
         } else {
-            zoom = 5;
+            zoom = 20;
         }
     }
 
     $: timelineDuration = Math.max(($videoDuration || 120) + 30, 120);
+
+    // Calculate dynamic tick intervals based on zoom depth
+    $: tickInterval = zoom >= 350 ? 1 : zoom >= 150 ? 2 : zoom >= 80 ? 5 : zoom >= 30 ? 10 : zoom >= 10 ? 30 : 60;
+
+    function formatTickTime(seconds: number): string {
+        const h = Math.floor(seconds / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        const s = Math.floor(seconds % 60);
+        
+        const mStr = m.toString().padStart(2, "0");
+        const sStr = s.toString().padStart(2, "0");
+        
+        if (h > 0) {
+            return `${h}:${mStr}:${sStr}`;
+        }
+        return `${mStr}:${sStr}`;
+    }
 
     let lastClampedDuration = 0;
     $: if ($videoDuration && $videoDuration !== lastClampedDuration) {
@@ -50,9 +70,11 @@
         clips = clips.map(clip => {
             let start = Math.min(clip.start, $videoDuration);
             let length = Math.min(clip.length, $videoDuration - start);
-            if (length < 1) {
-                start = Math.max(0, $videoDuration - 1);
-                length = $videoDuration - start;
+            if (length < 0.1) {
+                length = 0.1;
+            }
+            if (start < 0) {
+                start = 0;
             }
             return { ...clip, start, length };
         });
@@ -60,32 +82,36 @@
 
     let tracks: number[] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9];
 
-    let clips: Clip[] = [
-        {
-            id: 1,
-            track: 0,
-            start: 0,
-            length: 80,
-            color: "#6a8f63",
-            title: "Image",
-        },
-        {
-            id: 2,
-            track: 1,
-            start: 20,
-            length: 90,
-            color: "#6b63d9",
-            title: "Text",
-        },
-        {
-            id: 3,
-            track: 2,
-            start: 70,
-            length: 100,
-            color: "#4f7cff",
-            title: "Video",
-        },
-    ];
+    let clips: Clip[] = [];
+
+    // Sync from $subtitle store to local clips
+    let lastSubtitlesKey = "";
+    $: {
+        const currentKey = $subtitle.map(s => `${s.start}-${s.end}-${s.content}`).join('|');
+        if (currentKey !== lastSubtitlesKey && !drag && !resize) {
+            lastSubtitlesKey = currentKey;
+            clips = $subtitle.map((sub, index) => ({
+                id: index + 1,
+                track: 0, // Subtitles on track 1 (index 0)
+                start: sub.start,
+                length: sub.end - sub.start,
+                color: "#6b63d9", // Beautiful deep purple for subtitles
+                title: sub.content,
+            }));
+        }
+    }
+
+    // Sync from local clips back to $subtitle store in real-time
+    $: if (clips && (drag || resize)) {
+        const updated = clips.map(clip => ({
+            start: clip.start,
+            end: clip.start + clip.length,
+            content: clip.title
+        }));
+        subtitle.set(updated);
+        // Sync our serialization key so we avoid triggering the store-to-clips reactive block
+        lastSubtitlesKey = updated.map(s => `${s.start}-${s.end}-${s.content}`).join('|');
+    }
 
     let drag: DragState = null;
     let resize: ResizeState = null;
@@ -260,7 +286,7 @@
     <div class="zoom-bar">
         <span> Zoom </span>
 
-        <input type="range" min="2" max="150" step="1" bind:value={zoom} />
+        <input type="range" min="2" max="1200" step="1" bind:value={zoom} />
 
         <span>
             {zoom.toFixed(1)}x
@@ -277,97 +303,98 @@
         <div class="left-space"></div>
 
         <div class="ruler-content" style="width: {timelineDuration * zoom}px;">
-            {#each Array(Math.ceil(timelineDuration / 60)) as _, i}
+            {#each Array(Math.ceil(timelineDuration / tickInterval)) as _, i}
                 <div
                     class="tick"
                     style="
-						width:{60 * zoom}px
+						width:{tickInterval * zoom}px
 					"
                 >
-                    {Math.floor((i * 60) / 3600).toString().padStart(2, "0")}:
-                    {Math.floor(((i * 60) % 3600) / 60).toString().padStart(2, "0")}:00
+                    {formatTickTime(i * tickInterval)}
                 </div>
             {/each}
         </div>
     </div>
 
     <div class="tracks" bind:this={tracksRef}>
-        <!-- Playhead Tracker Line and Drag Handle -->
-        <!-- svelte-ignore a11y_no_static_element_interactions -->
-        <div 
-            class="playhead" 
-            style="left: {($videoCurrentTime * zoom) + 120}px;"
-        >
+        <div class="tracks-inner" style="width: {timelineDuration * zoom + 120}px;">
+            <!-- Playhead Tracker Line and Drag Handle -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div 
-                class="playhead-handle" 
-                on:mousedown={startPlayheadDrag}
-            ></div>
-        </div>
-
-        <!-- End of Video Marker Line -->
-        {#if $videoDuration}
-            <div 
-                class="video-end-line" 
-                style="left: {($videoDuration * zoom) + 120}px;"
+                class="playhead" 
+                style="left: {($videoCurrentTime * zoom) + 120}px;"
             >
-                <div class="video-end-label">End of Video</div>
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div 
+                    class="playhead-handle" 
+                    on:mousedown={startPlayheadDrag}
+                ></div>
             </div>
-        {/if}
 
-        {#each tracks as track}
-            <div class="track">
-                <div class="label">
-                    Track {track + 1}
+            <!-- End of Video Marker Line -->
+            {#if $videoDuration}
+                <div 
+                    class="video-end-line" 
+                    style="left: {($videoDuration * zoom) + 120}px;"
+                >
+                    <div class="video-end-label">End of Video</div>
                 </div>
+            {/if}
 
-                <div class="content" style="width: {timelineDuration * zoom}px;">
-                    {#each clips.filter((c) => c.track === track) as clip}
-                        <!-- svelte-ignore a11y_no_static_element_interactions -->
-                        <div
-                            class="clip"
-                            role="button"
-                            tabindex="0"
-                            style="
-								left:{clip.start * zoom}px;
-								width:{clip.length * zoom}px;
-								background:{clip.color};
-							"
-                            on:mousedown={(e) => down(e, clip)}
-                            on:keydown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                    e.preventDefault();
-                                }
-                            }}
-                        >
+            {#each tracks as track}
+                <div class="track">
+                    <div class="label">
+                        Track {track + 1}
+                    </div>
+
+                    <div class="content" style="width: {timelineDuration * zoom}px; background-size: {tickInterval * zoom}px 100%;">
+                        {#each clips.filter((c) => c.track === track) as clip}
                             <!-- svelte-ignore a11y_no_static_element_interactions -->
                             <div
-                                class="resize left"
+                                class="clip"
                                 role="button"
-                                tabindex="-1"
-                                aria-label="Resize left"
-                                on:mousedown={(e) =>
-                                    resizeStart(e, clip, "left")}
-                            ></div>
+                                tabindex="0"
+                                style="
+									left:{clip.start * zoom}px;
+									width:{clip.length * zoom}px;
+									background:{clip.color};
+								"
+                                on:mousedown={(e) => down(e, clip)}
+                                on:keydown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                        e.preventDefault();
+                                    }
+                                }}
+                            >
+                                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                                <div
+                                    class="resize left"
+                                    role="button"
+                                    tabindex="-1"
+                                    aria-label="Resize left"
+                                    on:mousedown={(e) =>
+                                        resizeStart(e, clip, "left")}
+                                ></div>
 
-                            <div class="title">
-                                {clip.title}
+                                <div class="title">
+                                    [{formatTime(clip.start)} - {formatTime(clip.start + clip.length)}] {clip.title}
+                                </div>
+
+                                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                                <div
+                                    class="resize right"
+                                    role="button"
+                                    tabindex="-1"
+                                    aria-label="Resize right"
+                                    on:mousedown={(e) =>
+                                        resizeStart(e, clip, "right")}
+                                ></div>
                             </div>
-
-                            <!-- svelte-ignore a11y_no_static_element_interactions -->
-                            <div
-                                class="resize right"
-                                role="button"
-                                tabindex="-1"
-                                aria-label="Resize right"
-                                on:mousedown={(e) =>
-                                    resizeStart(e, clip, "right")}
-                            ></div>
-                        </div>
-                    {/each}
+                        {/each}
+                    </div>
                 </div>
-            </div>
-        {/each}
+            {/each}
+        </div>
     </div>
 
 </div>
@@ -459,6 +486,13 @@
         contain: strict;
     }
 
+    .tracks-inner {
+        position: relative;
+        min-height: 100%;
+        display: flex;
+        flex-direction: column;
+    }
+
     .track {
         height: 60px;
 
@@ -503,12 +537,9 @@
 
         flex-shrink: 0;
 
-        background: repeating-linear-gradient(
-            to right,
-            #171b26 0px,
-            #171b26 179px,
-            #232937 180px
-        );
+        background-color: #171b26;
+        background-image: linear-gradient(to right, #232937 1px, transparent 1px);
+        background-repeat: repeat-x;
     }
 
     /* =========================
@@ -556,10 +587,13 @@
 
     .title {
         width: 100%;
-
         text-align: center;
-
         pointer-events: none;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        padding: 0 8px;
+        box-sizing: border-box;
     }
 
     /* =========================

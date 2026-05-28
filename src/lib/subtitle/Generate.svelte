@@ -2,10 +2,17 @@
     import { invoke } from "@tauri-apps/api/core";
     import { subtitle, type Subtitle } from "../store";
     async function generateSubtitle(videoUrl: string, count: number) {
-        const sub = await invoke("run_python", {
+        const sub = await invoke<any>("run_python", {
             name: videoUrl,
             count: count,
         });
-        subtitle.set(sub as Subtitle[]);
+        if (sub && sub.status === "ok" && Array.isArray(sub.message)) {
+            const mapped = sub.message.map((s: any) => ({
+                start: s.start,
+                end: s.end,
+                content: s.text || s.content || ""
+            }));
+            subtitle.set(mapped);
+        }
     }
 </script>
