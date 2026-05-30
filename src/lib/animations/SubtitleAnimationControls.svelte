@@ -272,6 +272,10 @@
                 font-family: {customFont || 'inherit'};
                 font-size: {fontSize * 0.8}px;
                 color: {hexOrRgbToRgba(fontColor, fontOpacity)};
+                -webkit-backdrop-filter: blur({8 * backgroundOpacity}px);
+                backdrop-filter: blur({8 * backgroundOpacity}px);
+                border: 1px solid rgba(255, 255, 255, {0.1 * backgroundOpacity});
+                box-shadow: 0 8px 32px rgba(0, 0, 0, {0.6 * backgroundOpacity}), inset 0 0 0 1px rgba(255, 255, 255, {0.15 * backgroundOpacity});
             ">
                 Elegant Subtitle Preview
             </div>
@@ -563,7 +567,6 @@
         border-radius: 6px;
         font-weight: 600;
         text-align: center;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.5);
         max-width: 90%;
         word-wrap: break-word;
         transition: all 0.2s ease;

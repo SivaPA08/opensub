@@ -312,6 +312,10 @@ import { subtitleAnimation } from "../store.js";
                             font-family: {$subtitleAnimation.customFont};
                             font-size: {$subtitleAnimation.fontSize}px;
                             color: {hexOrRgbToRgba($subtitleAnimation.fontColor, $subtitleAnimation.fontOpacity)};
+                            -webkit-backdrop-filter: blur({8 * $subtitleAnimation.backgroundOpacity}px);
+                            backdrop-filter: blur({8 * $subtitleAnimation.backgroundOpacity}px);
+                            border: 1px solid rgba(255, 255, 255, {0.1 * $subtitleAnimation.backgroundOpacity});
+                            box-shadow: 0 8px 32px rgba(0, 0, 0, {0.6 * $subtitleAnimation.backgroundOpacity}), inset 0 0 0 1px rgba(255, 255, 255, {0.15 * $subtitleAnimation.backgroundOpacity});
                         "
                         on:mousedown={startSubtitleDrag}
                         on:click|stopPropagation={handleSubtitleClick}
@@ -416,14 +420,10 @@ import { subtitleAnimation } from "../store.js";
         pointer-events: auto; /* Subtitle itself is interactive! */
         cursor: move; /* Reposition grab cursor */
         color: #ffffff;
-        background: rgba(10, 10, 10, 0.85);
-        backdrop-filter: blur(8px);
         padding: 10px 24px;
         border-radius: 8px;
         text-align: center;
         box-sizing: border-box;
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.15);
-        border: 1px solid rgba(255, 255, 255, 0.1);
         display: flex;
         flex-direction: column;
         align-items: center;
