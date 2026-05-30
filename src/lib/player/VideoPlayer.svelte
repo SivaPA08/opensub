@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onDestroy } from "svelte";
+import { subtitleAnimation } from "../store.js";
     import { videoPath, videoDuration, videoCurrentTime, subtitle, subtitleFontSize, type Subtitle } from "../store.js";
     import { invoke } from "@tauri-apps/api/core";
 
@@ -142,7 +143,10 @@
     }
 
     function changeSize(delta: number) {
-        subtitleFontSize.update(size => Math.max(12, Math.min(72, size + delta)));
+        subtitleAnimation.update(style => ({
+            ...style,
+            fontSize: Math.max(12, Math.min(80, style.fontSize + delta))
+        }));
     }
 
     function updateSubtitleText(sub: Subtitle, newText: string) {
@@ -154,6 +158,34 @@
                 return item;
             });
         });
+    }
+
+    function hexOrRgbToRgba(color: string, opacity: number): string {
+        if (!color) return `rgba(0,0,0,${opacity})`;
+        
+        // If it's already rgba, replace the alpha
+        if (color.startsWith('rgba')) {
+            return color.replace(/[\d\.]+\)$/, `${opacity})`);
+        }
+        
+        // If it's rgb, convert to rgba
+        if (color.startsWith('rgb')) {
+            return color.replace('rgb', 'rgba').replace(')', `, ${opacity})`);
+        }
+        
+        // If it's hex (#fff or #ffffff)
+        if (color.startsWith('#')) {
+            let hex = color.slice(1);
+            if (hex.length === 3) {
+                hex = hex.split('').map(c => c + c).join('');
+            }
+            const r = parseInt(hex.slice(0, 2), 16) || 0;
+            const g = parseInt(hex.slice(2, 4), 16) || 0;
+            const b = parseInt(hex.slice(4, 6), 16) || 0;
+            return `rgba(${r}, ${g}, ${b}, ${opacity})`;
+        }
+        
+        return color; // Fallback
     }
 
     $: if ($videoPath && $videoPath !== prevPath) {
@@ -241,14 +273,14 @@
                             </div>
                             
                             <div class="popover-section">
-                                <span class="section-label">Font Size: <span class="val-highlight">{$subtitleFontSize}px</span></span>
+                                <span class="section-label">Font Size: <span class="val-highlight">{$subtitleAnimation.fontSize}px</span></span>
                                 <div class="slider-row">
                                     <button class="adjust-btn" on:click={() => changeSize(-2)}>A-</button>
                                     <input 
                                         type="range" 
                                         min="12" 
-                                        max="72" 
-                                        bind:value={$subtitleFontSize} 
+                                        max="80" 
+                                        bind:value={$subtitleAnimation.fontSize} 
                                         class="size-slider"
                                     />
                                     <button class="adjust-btn" on:click={() => changeSize(2)}>A+</button>
@@ -276,6 +308,10 @@
                             top: {subY}%; 
                             width: {subWidth}%; 
                             transform: translate(-50%, -50%);
+                            background: {hexOrRgbToRgba($subtitleAnimation.backgroundColor, $subtitleAnimation.backgroundOpacity)};
+                            font-family: {$subtitleAnimation.customFont};
+                            font-size: {$subtitleAnimation.fontSize}px;
+                            color: {hexOrRgbToRgba($subtitleAnimation.fontColor, $subtitleAnimation.fontOpacity)};
                         "
                         on:mousedown={startSubtitleDrag}
                         on:click|stopPropagation={handleSubtitleClick}
@@ -283,7 +319,7 @@
                         {#if isEditingText}
                             <textarea
                                 class="subtitle-textarea"
-                                style="font-size: {$subtitleFontSize}px;"
+                                style="font-size: {$subtitleAnimation.fontSize}px; color: {hexOrRgbToRgba($subtitleAnimation.fontColor, $subtitleAnimation.fontOpacity)}; font-family: {$subtitleAnimation.customFont};"
                                 value={activeSubtitle.content}
                                 on:input={(e) => updateSubtitleText(activeSubtitle, e.currentTarget.value)}
                                 on:blur={() => isEditingText = false}
@@ -301,7 +337,7 @@
                             <!-- svelte-ignore a11y_no_static_element_interactions -->
                             <div 
                                 class="subtitle-text-render"
-                                style="font-size: {$subtitleFontSize}px;"
+                                style="font-size: {$subtitleAnimation.fontSize}px; color: {hexOrRgbToRgba($subtitleAnimation.fontColor, $subtitleAnimation.fontOpacity)}; font-family: {$subtitleAnimation.customFont};"
                                 on:dblclick={() => isEditingText = true}
                             >
                                 {activeSubtitle.content}

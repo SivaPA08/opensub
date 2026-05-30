@@ -13,3 +13,22 @@ export interface Subtitle {
 export const subtitle = writable<Subtitle[]>([]);
 export const wordPerFrame = writable<number>(-1);
 export const subtitleFontSize = writable(28);
+
+// Subtitle animation style settings
+export type SubtitleAnimationStyle = {
+    fontSize: number;
+    fontColor: string;
+    backgroundColor: string;
+    customFont: string; // Font family name or URL
+    fontOpacity: number; // 0 to 1
+    backgroundOpacity: number; // 0 to 1
+};
+
+export const subtitleAnimation = writable<SubtitleAnimationStyle>({
+    fontSize: 28,
+    fontColor: '#ffffff',
+    backgroundColor: 'rgba(10, 10, 10, 0.85)',
+    customFont: '',
+    fontOpacity: 1.0,
+    backgroundOpacity: 0.85
+});

@@ -2,6 +2,7 @@
     import { goto } from "$app/navigation";
     import VideoPlayer from "$lib/player/VideoPlayer.svelte";
     import TimeLine from "$lib/timeline/TimeLine.svelte";
+    import SubtitleAnimationControls from "$lib/animations/SubtitleAnimationControls.svelte";
 
     async function home(): Promise<void> {
         await goto("/");
@@ -64,8 +65,15 @@
     <div class="left" style="grid-template-rows: {topHeightPx}px 4px 1fr;">
         <!-- Section for setting -->
         <div class="top">
-            <h2>Setting</h2>
-            <button onclick={home}>Go Back</button>
+            <div class="setting-header">
+                <h2>Workspace settings</h2>
+                <button class="back-btn" onclick={home}>
+                    <span class="back-arrow">←</span> Home
+                </button>
+            </div>
+            <div class="setting-body">
+                <SubtitleAnimationControls />
+            </div>
         </div>
 
         <!-- Horizontal Resizer Divider -->
@@ -107,11 +115,62 @@
     }
 
     .top {
-        padding: 1rem;
-
-        background: #1a1a1a;
-
+        padding: 1.25rem;
+        background: #121216;
         overflow: auto;
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+        border-bottom: 1px solid #1f1f26;
+    }
+
+    .setting-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid #1f1f26;
+        padding-bottom: 0.75rem;
+    }
+
+    .setting-header h2 {
+        font-size: 1.1rem;
+        font-weight: 700;
+        margin: 0;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #e2e8f0;
+    }
+
+    .back-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: #e2e8f0;
+        font-size: 0.8rem;
+        font-weight: 600;
+        padding: 6px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .back-btn:hover {
+        background: rgba(255, 255, 255, 0.12);
+        border-color: #00bcd4;
+        color: #00bcd4;
+        transform: translateX(-2px);
+    }
+
+    .back-arrow {
+        font-size: 0.9rem;
+    }
+
+    .setting-body {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
     }
 
     .bottom {
