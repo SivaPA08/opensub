@@ -1,11 +1,33 @@
+import sys
+import subprocess
+import json
 from faster_whisper import WhisperModel
 
 model = WhisperModel("small", compute_type="float32")
 
 
+def get_audio_duration(filepath: str) -> float:
+    """Get audio duration in seconds using ffprobe."""
+    try:
+        result = subprocess.run(
+            [
+                "ffprobe", "-v", "quiet",
+                "-print_format", "json",
+                "-show_format", filepath
+            ],
+            capture_output=True, text=True
+        )
+        info = json.loads(result.stdout)
+        return float(info["format"]["duration"])
+    except Exception:
+        return 0.0
+
+
 def getvideo(filename: str, max_words: int):
     if filename==None or max_words==None:
         raise Exception("Filename and max_words are required")
+
+    duration = get_audio_duration(filename)
 
     segments, info = model.transcribe(
         filename,
@@ -15,12 +37,20 @@ def getvideo(filename: str, max_words: int):
     words = []
 
     for segment in segments:
+        # Report progress based on segment end time vs total duration
+        if duration > 0:
+            pct = min((segment.end / duration) * 100, 99.0)
+            print(f"PROGRESS:{pct:.1f}", file=sys.stderr, flush=True)
+
         for word in segment.words:
             words.append({
                 "word": word.word.strip(),
                 "start": word.start,
                 "end": word.end
             })
+
+    # Signal completion
+    print("PROGRESS:100.0", file=sys.stderr, flush=True)
 
     subs = []
 

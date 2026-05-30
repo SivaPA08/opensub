@@ -1,10 +1,12 @@
-use std::process::Command;
 use serde::{Deserialize, Serialize};
-use std::sync::Mutex;
+use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use tokio::net::TcpListener;
-use tokio::io::{AsyncReadExt, AsyncWriteExt, AsyncSeekExt};
+use std::process::{Command, Stdio};
+use std::sync::Mutex;
+use tauri::{AppHandle, Emitter};
 use tokio::fs::File;
+use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
+use tokio::net::TcpListener;
 
 #[derive(Serialize, Deserialize)]
 struct PyResponse {
@@ -115,9 +117,17 @@ async fn handle_client(mut socket: tokio::net::TcpStream) {
 
     let file_size = metadata.len();
     let end = range_end.unwrap_or(file_size - 1).min(file_size - 1);
-    let chunk_size = if file_size == 0 { 0 } else { end - range_start + 1 };
+    let chunk_size = if file_size == 0 {
+        0
+    } else {
+        end - range_start + 1
+    };
 
-    if file.seek(std::io::SeekFrom::Start(range_start)).await.is_err() {
+    if file
+        .seek(std::io::SeekFrom::Start(range_start))
+        .await
+        .is_err()
+    {
         let response = "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\n\r\n";
         let _ = socket.write_all(response.as_bytes()).await;
         return;
@@ -135,7 +145,10 @@ async fn handle_client(mut socket: tokio::net::TcpStream) {
     let mut headers = String::new();
     if is_range {
         headers.push_str("HTTP/1.1 206 Partial Content\r\n");
-        headers.push_str(&format!("Content-Range: bytes {}-{}/{}\r\n", range_start, end, file_size));
+        headers.push_str(&format!(
+            "Content-Range: bytes {}-{}/{}\r\n",
+            range_start, end, file_size
+        ));
     } else {
         headers.push_str("HTTP/1.1 200 OK\r\n");
     }
@@ -167,17 +180,47 @@ async fn handle_client(mut socket: tokio::net::TcpStream) {
 }
 
 #[tauri::command]
-async fn run_python(name: String, count: i32) -> Result<PyResponse, String> {
+async fn run_python(app: AppHandle, name: String, count: i32) -> Result<PyResponse, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        let output = Command::new("python3")
+        let mut child = Command::new("python3.12")
             .arg("../backend/main.py")
-            .arg(name)
+            .arg(&name)
             .arg(count.to_string())
-            .output()
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
             .map_err(|e| e.to_string())?;
 
-        let text = String::from_utf8_lossy(&output.stdout);
-        let res: PyResponse = serde_json::from_str(&text).map_err(|e| e.to_string())?;
+        // Read stderr in a thread to capture PROGRESS lines
+        let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
+        let app_clone = app.clone();
+        let stderr_handle = std::thread::spawn(move || {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    if let Some(pct_str) = line.strip_prefix("PROGRESS:") {
+                        if let Ok(pct) = pct_str.trim().parse::<f64>() {
+                            let _ = app_clone.emit("subtitle-progress", pct);
+                        }
+                    }
+                }
+            }
+        });
+
+        let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+        let stdout_reader = BufReader::new(stdout);
+        let mut stdout_text = String::new();
+        for line in stdout_reader.lines() {
+            if let Ok(l) = line {
+                stdout_text.push_str(&l);
+                stdout_text.push('\n');
+            }
+        }
+
+        let _ = child.wait();
+        let _ = stderr_handle.join();
+
+        let res: PyResponse = serde_json::from_str(&stdout_text).map_err(|e| e.to_string())?;
         Ok(res)
     })
     .await
@@ -215,7 +258,11 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init())
-        .invoke_handler(tauri::generate_handler![greet, run_python, get_streaming_url])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            run_python,
+            get_streaming_url
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
