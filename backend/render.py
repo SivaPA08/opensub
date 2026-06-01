@@ -108,7 +108,14 @@ def run():
         if total_frames <= 0:
             total_frames = 300
 
+        # Calculate scale factor (editor px -> video px)
+        video_info = config.get("video_info", {})
+        container_width = video_info.get("container_width", width)
+        container_height = video_info.get("container_height", height)
+        scale_factor = height / container_height if container_height > 0 else 1.0
+
         print(f"DEBUG: Video resolution: {width}x{height}, FPS: {fps:.2f}, Duration: {duration:.2f}s, Total Frames: {total_frames}", file=sys.stderr, flush=True)
+        print(f"DEBUG: Computed scale factor: {scale_factor:.4f} (height={height}, container_height={container_height})", file=sys.stderr, flush=True)
 
         # -------------------------------------------------------------------------
         # Start a local static HTTP server serving the Svelte built site
@@ -249,6 +256,7 @@ def run():
                             "subX": pos.get("subX", 50),
                             "subY": pos.get("subY", 85),
                             "subWidth": pos.get("subWidth", 70),
+                            "scaleFactor": scale_factor,
                             "style": style
                         }
 

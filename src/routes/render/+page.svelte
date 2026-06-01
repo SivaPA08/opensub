@@ -15,23 +15,32 @@
     let fontOpacity = 1.0;
     let backgroundOpacity = 0.85;
 
+    // Scaling factor (editor px -> video px)
+    let scaleFactor = 1.0;
+
     // Helper to convert hex or rgb to rgba with a specific opacity
     function hexOrRgbToRgba(color: string, opacity: number): string {
         if (!color) return `rgba(0,0,0,${opacity})`;
+        
+        // If it's already rgba, replace the alpha
         if (color.startsWith('rgba')) {
             return color.replace(/[\d\.]+\)$/, `${opacity})`);
         }
+        
+        // If it's rgb, convert to rgba
         if (color.startsWith('rgb')) {
             return color.replace('rgb', 'rgba').replace(')', `, ${opacity})`);
         }
+        
+        // If it's hex (#fff or #ffffff)
         if (color.startsWith('#')) {
             let hex = color.slice(1);
             if (hex.length === 3) {
                 hex = hex.split('').map(c => c + c).join('');
             }
-            const r = parseInt(hex.slice(0, 2), 16);
-            const g = parseInt(hex.slice(2, 4), 16);
-            const b = parseInt(hex.slice(4, 6), 16);
+            const r = parseInt(hex.slice(0, 2), 16) || 0;
+            const g = parseInt(hex.slice(2, 4), 16) || 0;
+            const b = parseInt(hex.slice(4, 6), 16) || 0;
             return `rgba(${r}, ${g}, ${b}, ${opacity})`;
         }
         return color;
@@ -44,6 +53,7 @@
             subX?: number;
             subY?: number;
             subWidth?: number;
+            scaleFactor?: number;
             style?: {
                 fontSize?: number;
                 fontColor?: string;
@@ -58,6 +68,7 @@
             if (state.subX !== undefined) subX = state.subX;
             if (state.subY !== undefined) subY = state.subY;
             if (state.subWidth !== undefined) subWidth = state.subWidth;
+            if (state.scaleFactor !== undefined) scaleFactor = state.scaleFactor;
 
             if (state.style) {
                 const s = state.style;
@@ -105,20 +116,24 @@
                 transform: translate(-50%, -50%);
                 background: {hexOrRgbToRgba(backgroundColor, backgroundOpacity)};
                 font-family: {customFont || '-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif'};
-                font-size: {fontSize}px;
+                font-size: {fontSize * scaleFactor}px;
                 color: {hexOrRgbToRgba(fontColor, fontOpacity)};
-                -webkit-backdrop-filter: blur({8 * backgroundOpacity}px);
-                backdrop-filter: blur({8 * backgroundOpacity}px);
-                border: 1px solid rgba(255, 255, 255, {0.1 * backgroundOpacity});
-                box-shadow: 0 8px 32px rgba(0, 0, 0, {0.6 * backgroundOpacity}), inset 0 0 0 1px rgba(255, 255, 255, {0.15 * backgroundOpacity});
+                padding: {10 * scaleFactor}px {24 * scaleFactor}px;
+                border-radius: {8 * scaleFactor}px;
+                min-height: {50 * scaleFactor}px;
+                -webkit-backdrop-filter: blur({8 * scaleFactor * backgroundOpacity}px);
+                backdrop-filter: blur({8 * scaleFactor * backgroundOpacity}px);
+                border: {1 * scaleFactor}px solid rgba(255, 255, 255, {0.1 * backgroundOpacity});
+                box-shadow: 0 {8 * scaleFactor}px {32 * scaleFactor}px rgba(0, 0, 0, {0.6 * backgroundOpacity}), inset 0 0 0 {1 * scaleFactor}px rgba(255, 255, 255, {0.15 * backgroundOpacity});
             "
         >
             <div 
                 class="subtitle-text-render"
                 style="
-                    font-size: {fontSize}px; 
+                    font-size: {fontSize * scaleFactor}px; 
                     color: {hexOrRgbToRgba(fontColor, fontOpacity)}; 
                     font-family: {customFont || '-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif'};
+                    line-height: 1.4;
                 "
             >
                 {content}
@@ -134,35 +149,39 @@
         width: 100%;
         height: 100%;
         background: transparent !important;
+        background-color: transparent !important;
         overflow: hidden;
     }
 
     .render-container {
-        position: relative;
+        position: absolute;
+        top: 0;
+        left: 0;
         width: 100%;
         height: 100%;
-        background: transparent;
+        background: transparent !important;
+        background-color: transparent !important;
+        overflow: hidden;
+        box-sizing: border-box;
     }
 
     .subtitle-block {
         position: absolute;
         color: #ffffff;
-        padding: 10px 24px;
-        border-radius: 8px;
         text-align: center;
         box-sizing: border-box;
         display: flex;
         flex-direction: column;
         align-items: center;
         justify-content: center;
-        min-height: 50px;
+        word-wrap: break-word;
+        white-space: pre-wrap;
     }
 
     .subtitle-text-render {
         width: 100%;
         word-wrap: break-word;
         font-weight: 600;
-        line-height: 1.4;
         position: relative;
     }
 </style>
