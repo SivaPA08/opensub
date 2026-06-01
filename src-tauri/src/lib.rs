@@ -228,6 +228,73 @@ async fn run_python(app: AppHandle, name: String, count: i32) -> Result<PyRespon
 }
 
 #[tauri::command]
+async fn run_render(app: AppHandle, config_json: String) -> Result<PyResponse, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        let config_path = "../backend/render_config.json";
+        std::fs::write(config_path, &config_json).map_err(|e| format!("Failed to write config: {}", e))?;
+
+        let mut child = Command::new("../backend/venv/bin/python")
+            .arg("../backend/render.py")
+            .arg(config_path)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|e| {
+                let _ = std::fs::remove_file(config_path);
+                format!("Failed to spawn render process: {}", e)
+            })?;
+
+        // Read stderr in a thread to capture PROGRESS lines
+        let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
+        let app_clone = app.clone();
+        let stderr_handle = std::thread::spawn(move || {
+            let reader = BufReader::new(stderr);
+            for line in reader.lines() {
+                if let Ok(line) = line {
+                    if let Some(pct_str) = line.strip_prefix("PROGRESS:") {
+                        if let Ok(pct) = pct_str.trim().parse::<f64>() {
+                            let _ = app_clone.emit("render-progress", pct);
+                        }
+                    }
+                }
+            }
+        });
+
+        let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
+        let stdout_reader = BufReader::new(stdout);
+        let mut stdout_text = String::new();
+        for line in stdout_reader.lines() {
+            if let Ok(l) = line {
+                stdout_text.push_str(&l);
+                stdout_text.push('\n');
+            }
+        }
+
+        let _ = child.wait();
+        let _ = stderr_handle.join();
+
+        // Clean up config file
+        let _ = std::fs::remove_file(config_path);
+
+        let res: PyResponse = serde_json::from_str(&stdout_text).map_err(|e| format!("Invalid JSON response: {}, stdout: {}", e, stdout_text))?;
+        Ok(res)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+fn save_font(name: String, data: Vec<u8>) -> Result<String, String> {
+    let font_dir = PathBuf::from("../backend/fonts");
+    std::fs::create_dir_all(&font_dir).map_err(|e| format!("Failed to create fonts directory: {}", e))?;
+
+    let file_path = font_dir.join(&name);
+    std::fs::write(&file_path, data).map_err(|e| format!("Failed to save font file: {}", e))?;
+
+    Ok(file_path.to_string_lossy().to_string())
+}
+
+#[tauri::command]
 fn get_streaming_url(path: String) -> Result<String, String> {
     let mut current_path = get_current_video_path().lock().unwrap();
     *current_path = Some(path);
@@ -261,6 +328,8 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             greet,
             run_python,
+            run_render,
+            save_font,
             get_streaming_url
         ])
         .run(tauri::generate_context!())

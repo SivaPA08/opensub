@@ -20,6 +20,7 @@ export type SubtitleAnimationStyle = {
     fontColor: string;
     backgroundColor: string;
     customFont: string; // Font family name or URL
+    customFontFile: string; // Filename on disk
     fontOpacity: number; // 0 to 1
     backgroundOpacity: number; // 0 to 1
 };
@@ -29,6 +30,7 @@ export const subtitleAnimation = writable<SubtitleAnimationStyle>({
     fontColor: '#ffffff',
     backgroundColor: 'rgba(10, 10, 10, 0.85)',
     customFont: '',
+    customFontFile: '',
     fontOpacity: 1.0,
     backgroundOpacity: 0.85
 });

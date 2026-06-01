@@ -1,19 +1,40 @@
 <script lang="ts">
-    import { onDestroy } from "svelte";
-import { subtitleAnimation } from "../store.js";
+    import { onDestroy, onMount } from "svelte";
+    import { subtitleAnimation } from "../store.js";
     import { videoPath, videoDuration, videoCurrentTime, subtitle, subtitleFontSize, type Subtitle } from "../store.js";
     import { invoke } from "@tauri-apps/api/core";
+    import { save } from "@tauri-apps/plugin-dialog";
+    import { revealItemInDir } from "@tauri-apps/plugin-opener";
+    import { listen } from "@tauri-apps/api/event";
 
     let videoElement: HTMLVideoElement;
     let videoSrc = "";
 
+    // Rendering State
+    let showRenderOverlay = false;
+    let isRendering = false;
+    let renderProgress = 0;
+    let renderError = "";
+    let renderSuccess = false;
+    let outputPath = "";
+
+    let unlistenRender: (() => void) | null = null;
+
+    onMount(async () => {
+        unlistenRender = await listen<number>("render-progress", (event) => {
+            renderProgress = Math.round(event.payload);
+        });
+    });
+
     onDestroy(() => {
+        if (unlistenRender) unlistenRender();
         if (videoElement) {
             videoElement.pause();
             videoElement.src = "";
             videoElement.load();
         }
     });
+
     let errorMessage = "";
     let loading = false;
     let loaded = false;
@@ -188,6 +209,107 @@ import { subtitleAnimation } from "../store.js";
         return color; // Fallback
     }
 
+    async function chooseSaveLocation() {
+        try {
+            const inputName = $videoPath ? $videoPath.split("/").pop() : "output.mp4";
+            const defaultName = inputName ? inputName.replace(/\.[^/.]+$/, "") + "_subbed.mp4" : "output.mp4";
+            
+            const path = await save({
+                title: "Save Rendered Video",
+                defaultPath: defaultName,
+                filters: [
+                    {
+                        name: "Video",
+                        extensions: ["mp4"]
+                    }
+                ]
+            });
+            if (path && typeof path === "string") {
+                outputPath = path;
+            }
+        } catch (err) {
+            console.error("Error choosing save location:", err);
+            renderError = "Failed to choose save location: " + err;
+        }
+    }
+
+    async function openOutputFolder() {
+        if (!outputPath) return;
+        try {
+            await revealItemInDir(outputPath);
+        } catch (err) {
+            console.error("Error opening output folder:", err);
+        }
+    }
+
+    async function startRendering() {
+        if (!outputPath) return;
+        
+        isRendering = true;
+        renderProgress = 0;
+        renderError = "";
+        renderSuccess = false;
+        
+        try {
+            const config = {
+                input_path: $videoPath,
+                output_path: outputPath,
+                subtitles: $subtitle.map(s => ({
+                    start: s.start,
+                    end: s.end,
+                    content: s.content
+                })),
+                style: {
+                    fontSize: $subtitleAnimation.fontSize,
+                    fontColor: $subtitleAnimation.fontColor,
+                    backgroundColor: $subtitleAnimation.backgroundColor,
+                    customFont: $subtitleAnimation.customFont,
+                    customFontFile: $subtitleAnimation.customFontFile,
+                    fontOpacity: $subtitleAnimation.fontOpacity,
+                    backgroundOpacity: $subtitleAnimation.backgroundOpacity
+                },
+                position: {
+                    subX: subX,
+                    subY: subY,
+                    subWidth: subWidth
+                },
+                video_info: {
+                    width: videoWidth,
+                    height: videoHeight,
+                    container_width: containerRef ? containerRef.clientWidth : videoWidth,
+                    container_height: containerRef ? containerRef.clientHeight : videoHeight
+                }
+            };
+            
+            const configJson = JSON.stringify(config);
+            
+            const result = await invoke<{ status: string, message: string }>("run_render", {
+                configJson: configJson
+            });
+            
+            if (result.status === "ok") {
+                renderSuccess = true;
+            } else {
+                renderError = result.message;
+            }
+        } catch (err) {
+            console.error("Render failed:", err);
+            renderError = String(err);
+        } finally {
+            isRendering = false;
+        }
+    }
+
+    function closeRenderOverlay() {
+        showRenderOverlay = false;
+        renderSuccess = false;
+        renderError = "";
+    }
+
+    function handleVideoEnded() {
+        showRenderOverlay = true;
+    }
+
     $: if ($videoPath && $videoPath !== prevPath) {
         prevPath = $videoPath;
         loading = true;
@@ -237,6 +359,7 @@ import { subtitleAnimation } from "../store.js";
                 bind:currentTime={$videoCurrentTime}
                 bind:videoWidth={videoWidth}
                 bind:videoHeight={videoHeight}
+                on:ended={handleVideoEnded}
                 on:loadedmetadata={() => {
                     loaded = true;
                     console.log("video metadata loaded");
@@ -360,13 +483,83 @@ import { subtitleAnimation } from "../store.js";
                     </button>
                 {/if}
             </div>
+
+            <!-- Render Overlay -->
+            {#if showRenderOverlay}
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div class="render-overlay animate-fade-in" on:mousedown|stopPropagation>
+                    <div class="render-card">
+                        <button class="close-overlay-btn" on:click={closeRenderOverlay}>×</button>
+                        
+                        {#if isRendering}
+                            <h3 class="render-title">Rendering Video</h3>
+                            <p class="render-subtitle">Burning custom styled subtitles into your video file...</p>
+                            
+                            <div class="progress-container">
+                                <div class="progress-bar-outer">
+                                    <div class="progress-bar-inner" style="width: {renderProgress}%"></div>
+                                </div>
+                                <span class="progress-text">{renderProgress}%</span>
+                            </div>
+                        {:else if renderSuccess}
+                            <div class="success-badge">✓</div>
+                            <h3 class="render-title">Render Complete!</h3>
+                            <p class="render-subtitle">Your video has been saved successfully with burned-in subtitles.</p>
+                            
+                            <div class="success-path">{outputPath}</div>
+                            
+                            <div class="actions-row">
+                                <button class="action-btn primary" on:click={openOutputFolder}>Open Folder</button>
+                                <button class="action-btn secondary" on:click={closeRenderOverlay}>Dismiss</button>
+                            </div>
+                        {:else}
+                            <h3 class="render-title">Export & Render Video</h3>
+                            <p class="render-subtitle">Save your video with all the custom subtitle adjustments and styles.</p>
+                            
+                            {#if renderError}
+                                <div class="render-error-box">
+                                    <strong>Error:</strong> {renderError}
+                                </div>
+                            {/if}
+                            
+                            <div class="location-picker">
+                                <span class="picker-label">Destination File:</span>
+                                <div class="picker-row">
+                                    <span class="chosen-path" class:placeholder={!outputPath}>
+                                        {outputPath ? outputPath : "No output location selected"}
+                                    </span>
+                                    <button class="picker-btn" on:click={chooseSaveLocation}>
+                                        Browse...
+                                    </button>
+                                </div>
+                            </div>
+                            
+                            <div class="actions-row">
+                                <button 
+                                    class="action-btn primary" 
+                                    disabled={!outputPath} 
+                                    on:click={startRendering}
+                                >
+                                    Start Render
+                                </button>
+                                <button class="action-btn secondary" on:click={closeRenderOverlay}>Cancel</button>
+                            </div>
+                        {/if}
+                    </div>
+                </div>
+            {/if}
         </div>
         <div class="status">
-            {#if loaded}
-                <span class="success-dot"></span> Streaming high-quality local media
-            {:else}
-                <div class="mini-spinner"></div> Buffering video stream...
-            {/if}
+            <div class="status-left">
+                {#if loaded}
+                    <span class="success-dot"></span> Streaming high-quality local media
+                {:else}
+                    <div class="mini-spinner"></div> Buffering video stream...
+                {/if}
+            </div>
+            <button class="export-btn" on:click={() => showRenderOverlay = true}>
+                Export Video
+            </button>
         </div>
     </div>
 {:else}
@@ -729,14 +922,280 @@ import { subtitleAnimation } from "../store.js";
     .status {
         display: flex;
         align-items: center;
-        justify-content: center;
-        padding: 0.75rem 1rem;
+        justify-content: space-between;
+        padding: 0.75rem 1.25rem;
         background: #111111;
         border-top: 1px solid #1f1f1f;
         color: #999999;
         font-size: 0.8rem;
         font-weight: 500;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .status-left {
+        display: flex;
+        align-items: center;
+    }
+
+    .export-btn {
+        background: #00bcd4;
+        border: none;
+        color: black;
+        padding: 6px 14px;
+        border-radius: 6px;
+        font-size: 0.78rem;
+        font-weight: 700;
+        cursor: pointer;
+        transition: background-color 0.2s, transform 0.2s;
+        box-shadow: 0 4px 12px rgba(0, 188, 212, 0.3);
+        font-family: inherit;
+    }
+
+    .export-btn:hover {
+        background: #00acc1;
+        transform: translateY(-1px);
+    }
+
+    .export-btn:active {
+        transform: translateY(0);
+    }
+
+    /* =========================
+	   RENDER OVERLAY & CARD
+	========================= */
+    .render-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.75);
+        backdrop-filter: blur(12px);
+        z-index: 1000;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        box-sizing: border-box;
+    }
+
+    .render-card {
+        background: #141822;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 16px;
+        padding: 30px;
+        width: 100%;
+        max-width: 440px;
+        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+        position: relative;
+        text-align: center;
+        color: #ffffff;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    }
+
+    .close-overlay-btn {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        background: transparent;
+        border: none;
+        color: #8f96a8;
+        font-size: 24px;
+        cursor: pointer;
+        line-height: 1;
+        transition: color 0.15s ease;
+    }
+
+    .close-overlay-btn:hover {
+        color: #ffffff;
+    }
+
+    .render-title {
+        font-size: 1.25rem;
+        font-weight: 700;
+        margin: 0 0 8px 0;
+        letter-spacing: -0.02em;
+    }
+
+    .render-subtitle {
+        font-size: 0.88rem;
+        color: #8f96a8;
+        margin: 0 0 24px 0;
+        line-height: 1.5;
+    }
+
+    .location-picker {
+        background: rgba(0, 0, 0, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 8px;
+        padding: 14px;
+        margin-bottom: 24px;
+        text-align: left;
+    }
+
+    .picker-label {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #8f96a8;
+        font-weight: 700;
+        display: block;
+        margin-bottom: 8px;
+    }
+
+    .picker-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .chosen-path {
+        flex: 1;
+        font-size: 0.82rem;
+        color: #ffffff;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        background: rgba(0, 0, 0, 0.3);
+        padding: 8px 12px;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .chosen-path.placeholder {
+        color: #4a5268;
+    }
+
+    .picker-btn {
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: white;
+        padding: 8px 16px;
+        border-radius: 6px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 0.15s, border-color 0.15s;
+    }
+
+    .picker-btn:hover {
+        background: rgba(255, 255, 255, 0.15);
+        border-color: #00bcd4;
+    }
+
+    .actions-row {
+        display: flex;
+        gap: 12px;
+        justify-content: center;
+    }
+
+    .action-btn {
+        padding: 10px 24px;
+        border-radius: 8px;
+        font-size: 0.88rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: none;
+    }
+
+    .action-btn.primary {
+        background: #00bcd4;
+        color: black;
+        box-shadow: 0 4px 14px rgba(0, 188, 212, 0.3);
+    }
+
+    .action-btn.primary:hover:not(:disabled) {
+        background: #00acc1;
+        transform: translateY(-1px);
+    }
+
+    .action-btn.primary:disabled {
+        background: #2a3140;
+        color: #4a5268;
+        cursor: not-allowed;
+        box-shadow: none;
+    }
+
+    .action-btn.secondary {
+        background: rgba(255, 255, 255, 0.08);
+        color: white;
+        border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .action-btn.secondary:hover {
+        background: rgba(255, 255, 255, 0.15);
+    }
+
+    .render-error-box {
+        background: rgba(255, 74, 74, 0.1);
+        border: 1px solid rgba(255, 74, 74, 0.2);
+        color: #ff6b6b;
+        padding: 12px;
+        border-radius: 8px;
+        font-size: 0.82rem;
+        margin-bottom: 20px;
+        text-align: left;
+        line-height: 1.4;
+    }
+
+    /* Progress and Success States */
+    .progress-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 12px;
+        margin: 20px 0;
+    }
+
+    .progress-bar-outer {
+        width: 100%;
+        height: 6px;
+        background: rgba(255, 255, 255, 0.08);
+        border-radius: 3px;
+        overflow: hidden;
+    }
+
+    .progress-bar-inner {
+        height: 100%;
+        background: #00bcd4;
+        border-radius: 3px;
+        transition: width 0.3s ease;
+        box-shadow: 0 0 10px rgba(0, 188, 212, 0.5);
+    }
+
+    .progress-text {
+        font-size: 1.25rem;
+        font-weight: 700;
+        color: #00bcd4;
+        font-family: 'JetBrains Mono', monospace;
+    }
+
+    .success-badge {
+        width: 60px;
+        height: 60px;
+        border-radius: 50%;
+        background: rgba(0, 230, 118, 0.1);
+        border: 2px solid #00e676;
+        color: #00e676;
+        font-size: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 20px auto;
+        box-shadow: 0 0 20px rgba(0, 230, 118, 0.2);
+    }
+
+    .success-path {
+        background: rgba(0, 0, 0, 0.2);
+        padding: 10px 14px;
+        border-radius: 8px;
+        font-size: 0.78rem;
+        color: #8f96a8;
+        font-family: monospace;
+        margin-bottom: 24px;
+        word-break: break-all;
+        border: 1px solid rgba(255, 255, 255, 0.04);
     }
 
     .success-dot {

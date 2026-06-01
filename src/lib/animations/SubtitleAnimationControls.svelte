@@ -1,15 +1,17 @@
 <script lang="ts">
     import { subtitleAnimation } from "../store.js";
     import ColorPicker from "../colorpicker/ColorPicker.svelte";
+    import { invoke } from "@tauri-apps/api/core";
 
     // Bindings for local settings, initialized from store
     let fontSize = $subtitleAnimation.fontSize;
     let fontColor = $subtitleAnimation.fontColor;
     let backgroundColor = $subtitleAnimation.backgroundColor;
     let customFont = $subtitleAnimation.customFont;
+    let customFontFile = $subtitleAnimation.customFontFile || "";
     let fontOpacity = $subtitleAnimation.fontOpacity ?? 1.0;
     let backgroundOpacity = $subtitleAnimation.backgroundOpacity ?? 0.85;
-    let customFontName = "";
+    let customFontName = $subtitleAnimation.customFontFile || "";
 
     // Track active picker sections: "font" | "bg" | null
     let activePicker: "font" | "bg" | null = null;
@@ -20,6 +22,7 @@
         fontColor,
         backgroundColor,
         customFont,
+        customFontFile,
         fontOpacity,
         backgroundOpacity
     });
@@ -73,35 +76,51 @@
         }
     }
 
-    function loadFont(file: File) {
-        const url = URL.createObjectURL(file);
-        const fontName = `custom-${file.name.replace(/\W+/g, '-')}`;
-        
-        // Dynamic @font-face injection
-        const style = document.createElement('style');
-        style.id = `font-face-${fontName}`;
-        style.innerHTML = `
-            @font-face {
-                font-family: '${fontName}';
-                src: url('${url}');
-                font-weight: normal;
-                font-style: normal;
+    async function loadFont(file: File) {
+        try {
+            const buffer = await file.arrayBuffer();
+            const data = new Uint8Array(buffer);
+            
+            // Invoke Rust to save font to ../backend/fonts/
+            await invoke("save_font", {
+                name: file.name,
+                data: Array.from(data)
+            });
+            
+            const url = URL.createObjectURL(file);
+            const fontName = `custom-${file.name.replace(/\W+/g, '-')}`;
+            
+            // Dynamic @font-face injection
+            const style = document.createElement('style');
+            style.id = `font-face-${fontName}`;
+            style.innerHTML = `
+                @font-face {
+                    font-family: '${fontName}';
+                    src: url('${url}');
+                    font-weight: normal;
+                    font-style: normal;
+                }
+            `;
+            
+            // Remove existing element of the same id if present
+            const existing = document.getElementById(style.id);
+            if (existing) {
+                existing.remove();
             }
-        `;
-        
-        // Remove existing element of the same id if present
-        const existing = document.getElementById(style.id);
-        if (existing) {
-            existing.remove();
+            document.head.appendChild(style);
+            
+            customFont = fontName;
+            customFontFile = file.name;
+            customFontName = file.name;
+        } catch (err) {
+            console.error("Failed to load font:", err);
+            alert("Failed to load custom font: " + err);
         }
-        document.head.appendChild(style);
-        
-        customFont = fontName;
-        customFontName = file.name;
     }
 
     function resetFont() {
         customFont = "";
+        customFontFile = "";
         customFontName = "";
     }
 
