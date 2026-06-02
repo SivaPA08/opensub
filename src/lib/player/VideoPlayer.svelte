@@ -1,7 +1,14 @@
 <script lang="ts">
     import { onDestroy, onMount } from "svelte";
     import { subtitleAnimation } from "../store.js";
-    import { videoPath, videoDuration, videoCurrentTime, subtitle, subtitleFontSize, type Subtitle } from "../store.js";
+    import {
+        videoPath,
+        videoDuration,
+        videoCurrentTime,
+        subtitle,
+        subtitleFontSize,
+        type Subtitle,
+    } from "../store.js";
     import { invoke } from "@tauri-apps/api/core";
     import { save } from "@tauri-apps/plugin-dialog";
     import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -42,10 +49,11 @@
 
     let videoWidth = 0;
     let videoHeight = 0;
-    $: containerAspectRatio = videoWidth && videoHeight ? `${videoWidth} / ${videoHeight}` : '16 / 9';
+    $: containerAspectRatio =
+        videoWidth && videoHeight ? `${videoWidth} / ${videoHeight}` : "16 / 9";
 
     $: activeSubtitle = $subtitle.find(
-        (sub) => $videoCurrentTime >= sub.start && $videoCurrentTime <= sub.end
+        (sub) => $videoCurrentTime >= sub.start && $videoCurrentTime <= sub.end,
     );
 
     let showSizeControls = false;
@@ -77,7 +85,7 @@
     // Drag-to-Reposition Logic
     function startSubtitleDrag(e: MouseEvent) {
         const target = e.target as HTMLElement;
-        if (target.classList.contains('resize-handle') || isEditingText) return;
+        if (target.classList.contains("resize-handle") || isEditingText) return;
 
         e.preventDefault();
         e.stopPropagation();
@@ -87,8 +95,8 @@
         initialSubX = subX;
         initialSubY = subY;
 
-        window.addEventListener('mousemove', handleSubtitleDrag);
-        window.addEventListener('mouseup', stopSubtitleDrag);
+        window.addEventListener("mousemove", handleSubtitleDrag);
+        window.addEventListener("mouseup", stopSubtitleDrag);
     }
 
     function handleSubtitleDrag(e: MouseEvent) {
@@ -107,8 +115,8 @@
 
     function stopSubtitleDrag() {
         isDraggingSubtitle = false;
-        window.removeEventListener('mousemove', handleSubtitleDrag);
-        window.removeEventListener('mouseup', stopSubtitleDrag);
+        window.removeEventListener("mousemove", handleSubtitleDrag);
+        window.removeEventListener("mouseup", stopSubtitleDrag);
     }
 
     // Drag-to-Resize Logic
@@ -119,8 +127,8 @@
         resizeStartX = e.clientX;
         initialSubWidth = subWidth;
 
-        window.addEventListener('mousemove', handleSubtitleResize);
-        window.addEventListener('mouseup', stopSubtitleResize);
+        window.addEventListener("mousemove", handleSubtitleResize);
+        window.addEventListener("mouseup", stopSubtitleResize);
     }
 
     function handleSubtitleResize(e: MouseEvent) {
@@ -135,8 +143,8 @@
 
     function stopSubtitleResize() {
         isResizingSubtitle = false;
-        window.removeEventListener('mousemove', handleSubtitleResize);
-        window.removeEventListener('mouseup', stopSubtitleResize);
+        window.removeEventListener("mousemove", handleSubtitleResize);
+        window.removeEventListener("mouseup", stopSubtitleResize);
     }
 
     function addSubtitleAtPlayhead() {
@@ -147,10 +155,10 @@
         const newSub: Subtitle = {
             start: parseFloat(currentTime.toFixed(3)),
             end: parseFloat(end.toFixed(3)),
-            content: "New Subtitle segment"
+            content: "New Subtitle segment",
         };
 
-        subtitle.update(items => {
+        subtitle.update((items) => {
             const updated = [...items, newSub];
             return updated.sort((a, b) => a.start - b.start);
         });
@@ -164,15 +172,15 @@
     }
 
     function changeSize(delta: number) {
-        subtitleAnimation.update(style => ({
+        subtitleAnimation.update((style) => ({
             ...style,
-            fontSize: Math.max(12, Math.min(80, style.fontSize + delta))
+            fontSize: Math.max(12, Math.min(80, style.fontSize + delta)),
         }));
     }
 
     function updateSubtitleText(sub: Subtitle, newText: string) {
-        subtitle.update(items => {
-            return items.map(item => {
+        subtitle.update((items) => {
+            return items.map((item) => {
                 if (item.start === sub.start && item.end === sub.end) {
                     return { ...item, content: newText };
                 }
@@ -183,46 +191,53 @@
 
     function hexOrRgbToRgba(color: string, opacity: number): string {
         if (!color) return `rgba(0,0,0,${opacity})`;
-        
+
         // If it's already rgba, replace the alpha
-        if (color.startsWith('rgba')) {
+        if (color.startsWith("rgba")) {
             return color.replace(/[\d\.]+\)$/, `${opacity})`);
         }
-        
+
         // If it's rgb, convert to rgba
-        if (color.startsWith('rgb')) {
-            return color.replace('rgb', 'rgba').replace(')', `, ${opacity})`);
+        if (color.startsWith("rgb")) {
+            return color.replace("rgb", "rgba").replace(")", `, ${opacity})`);
         }
-        
+
         // If it's hex (#fff or #ffffff)
-        if (color.startsWith('#')) {
+        if (color.startsWith("#")) {
             let hex = color.slice(1);
             if (hex.length === 3) {
-                hex = hex.split('').map(c => c + c).join('');
+                hex = hex
+                    .split("")
+                    .map((c) => c + c)
+                    .join("");
             }
             const r = parseInt(hex.slice(0, 2), 16) || 0;
             const g = parseInt(hex.slice(2, 4), 16) || 0;
             const b = parseInt(hex.slice(4, 6), 16) || 0;
             return `rgba(${r}, ${g}, ${b}, ${opacity})`;
         }
-        
+
         return color; // Fallback
     }
 
     async function chooseSaveLocation() {
         try {
-            const inputName = $videoPath ? $videoPath.split("/").pop() : "output.mp4";
-            const defaultName = inputName ? inputName.replace(/\.[^/.]+$/, "") + "_subbed.mp4" : "output.mp4";
-            
+            const inputName = $videoPath
+                ? $videoPath.split("/").pop()
+                : "output.mp4";
+            const defaultName = inputName
+                ? inputName.replace(/\.[^/.]+$/, "") + "_subbed.mp4"
+                : "output.mp4";
+
             const path = await save({
                 title: "Save Rendered Video",
                 defaultPath: defaultName,
                 filters: [
                     {
                         name: "Video",
-                        extensions: ["mp4"]
-                    }
-                ]
+                        extensions: ["mp4"],
+                    },
+                ],
             });
             if (path && typeof path === "string") {
                 outputPath = path;
@@ -244,20 +259,20 @@
 
     async function startRendering() {
         if (!outputPath) return;
-        
+
         isRendering = true;
         renderProgress = 0;
         renderError = "";
         renderSuccess = false;
-        
+
         try {
             const config = {
                 input_path: $videoPath,
                 output_path: outputPath,
-                subtitles: $subtitle.map(s => ({
+                subtitles: $subtitle.map((s) => ({
                     start: s.start,
                     end: s.end,
-                    content: s.content
+                    content: s.content,
                 })),
                 style: {
                     fontSize: $subtitleAnimation.fontSize,
@@ -266,27 +281,34 @@
                     customFont: $subtitleAnimation.customFont,
                     customFontFile: $subtitleAnimation.customFontFile,
                     fontOpacity: $subtitleAnimation.fontOpacity,
-                    backgroundOpacity: $subtitleAnimation.backgroundOpacity
+                    backgroundOpacity: $subtitleAnimation.backgroundOpacity,
                 },
                 position: {
                     subX: subX,
                     subY: subY,
-                    subWidth: subWidth
+                    subWidth: subWidth,
                 },
                 video_info: {
                     width: videoWidth,
                     height: videoHeight,
-                    container_width: containerRef ? containerRef.clientWidth : videoWidth,
-                    container_height: containerRef ? containerRef.clientHeight : videoHeight
-                }
+                    container_width: containerRef
+                        ? containerRef.clientWidth
+                        : videoWidth,
+                    container_height: containerRef
+                        ? containerRef.clientHeight
+                        : videoHeight,
+                },
             };
-            
+
             const configJson = JSON.stringify(config);
-            
-            const result = await invoke<{ status: string, message: string }>("run_render", {
-                configJson: configJson
-            });
-            
+
+            const result = await invoke<{ status: string; message: string }>(
+                "run_render",
+                {
+                    configJson: configJson,
+                },
+            );
+
             if (result.status === "ok") {
                 renderSuccess = true;
             } else {
@@ -323,7 +345,8 @@
             })
             .catch((err) => {
                 console.error("Failed to start video stream:", err);
-                errorMessage = "Failed to initialize local HTTP streaming server.";
+                errorMessage =
+                    "Failed to initialize local HTTP streaming server.";
             })
             .finally(() => {
                 loading = false;
@@ -346,7 +369,11 @@
     </div>
 {:else if videoSrc}
     <div class="video-wrapper animate-fade-in">
-        <div class="video-container" bind:this={containerRef} style="aspect-ratio: {containerAspectRatio};">
+        <div
+            class="video-container"
+            bind:this={containerRef}
+            style="aspect-ratio: {containerAspectRatio};"
+        >
             <!-- svelte-ignore a11y_media_has_caption -->
             <video
                 src={videoSrc}
@@ -357,8 +384,8 @@
                 bind:this={videoElement}
                 bind:duration={$videoDuration}
                 bind:currentTime={$videoCurrentTime}
-                bind:videoWidth={videoWidth}
-                bind:videoHeight={videoHeight}
+                bind:videoWidth
+                bind:videoHeight
                 on:ended={handleVideoEnded}
                 on:loadedmetadata={() => {
                     loaded = true;
@@ -373,7 +400,8 @@
                     console.log("video can play through");
                 }}
                 on:error={(event) => {
-                    const mediaError = (event.currentTarget as HTMLVideoElement).error;
+                    const mediaError = (event.currentTarget as HTMLVideoElement)
+                        .error;
                     console.error("Video element error:", mediaError);
                     errorMessage = `Playback failed: ${mediaError ? mediaError.message : "file may be unsupported or corrupted."}`;
                     loaded = false;
@@ -389,32 +417,59 @@
                     <!-- Floating Popover Controls -->
                     {#if showSizeControls}
                         <!-- svelte-ignore a11y_no_static_element_interactions -->
-                        <div class="size-controls-popover animate-scale-in" on:mousedown|stopPropagation>
+                        <div
+                            class="size-controls-popover animate-scale-in"
+                            on:mousedown|stopPropagation
+                        >
                             <div class="popover-header">
-                                <span class="popover-title">Subtitle Properties</span>
-                                <button class="close-btn" on:click={() => showSizeControls = false}>×</button>
+                                <span class="popover-title"
+                                    >Subtitle Properties</span
+                                >
+                                <button
+                                    class="close-btn"
+                                    on:click={() => (showSizeControls = false)}
+                                    >×</button
+                                >
                             </div>
-                            
+
                             <div class="popover-section">
-                                <span class="section-label">Font Size: <span class="val-highlight">{$subtitleAnimation.fontSize}px</span></span>
+                                <span class="section-label"
+                                    >Font Size: <span class="val-highlight"
+                                        >{$subtitleAnimation.fontSize}px</span
+                                    ></span
+                                >
                                 <div class="slider-row">
-                                    <button class="adjust-btn" on:click={() => changeSize(-2)}>A-</button>
-                                    <input 
-                                        type="range" 
-                                        min="12" 
-                                        max="80" 
-                                        bind:value={$subtitleAnimation.fontSize} 
+                                    <button
+                                        class="adjust-btn"
+                                        on:click={() => changeSize(-2)}
+                                        >A-</button
+                                    >
+                                    <input
+                                        type="range"
+                                        min="12"
+                                        max="80"
+                                        bind:value={$subtitleAnimation.fontSize}
                                         class="size-slider"
                                     />
-                                    <button class="adjust-btn" on:click={() => changeSize(2)}>A+</button>
+                                    <button
+                                        class="adjust-btn"
+                                        on:click={() => changeSize(2)}
+                                        >A+</button
+                                    >
                                 </div>
                             </div>
 
                             <div class="popover-section">
-                                <span class="section-label">Edit text content:</span>
-                                <textarea 
+                                <span class="section-label"
+                                    >Edit text content:</span
+                                >
+                                <textarea
                                     value={activeSubtitle.content}
-                                    on:input={(e) => updateSubtitleText(activeSubtitle, e.currentTarget.value)}
+                                    on:input={(e) =>
+                                        updateSubtitleText(
+                                            activeSubtitle,
+                                            e.currentTarget.value,
+                                        )}
                                     class="edit-textarea"
                                     rows="2"
                                 ></textarea>
@@ -424,21 +479,32 @@
 
                     <!-- svelte-ignore a11y_click_events_have_key_events -->
                     <!-- svelte-ignore a11y_no_static_element_interactions -->
-                    <div 
+                    <div
                         class="subtitle-block animate-scale-in"
                         style="
                             left: {subX}%; 
                             top: {subY}%; 
                             width: {subWidth}%; 
                             transform: translate(-50%, -50%);
-                            background: {hexOrRgbToRgba($subtitleAnimation.backgroundColor, $subtitleAnimation.backgroundOpacity)};
+                            background: {hexOrRgbToRgba(
+                            $subtitleAnimation.backgroundColor,
+                            $subtitleAnimation.backgroundOpacity,
+                        )};
                             font-family: {$subtitleAnimation.customFont};
                             font-size: {$subtitleAnimation.fontSize}px;
-                            color: {hexOrRgbToRgba($subtitleAnimation.fontColor, $subtitleAnimation.fontOpacity)};
-                            -webkit-backdrop-filter: blur({8 * $subtitleAnimation.backgroundOpacity}px);
-                            backdrop-filter: blur({8 * $subtitleAnimation.backgroundOpacity}px);
-                            border: 1px solid rgba(255, 255, 255, {0.1 * $subtitleAnimation.backgroundOpacity});
-                            box-shadow: 0 8px 32px rgba(0, 0, 0, {0.6 * $subtitleAnimation.backgroundOpacity}), inset 0 0 0 1px rgba(255, 255, 255, {0.15 * $subtitleAnimation.backgroundOpacity});
+                            color: {hexOrRgbToRgba(
+                            $subtitleAnimation.fontColor,
+                            $subtitleAnimation.fontOpacity,
+                        )};
+                            -webkit-backdrop-filter: blur({8 *
+                            $subtitleAnimation.backgroundOpacity}px);
+                            backdrop-filter: blur({8 *
+                            $subtitleAnimation.backgroundOpacity}px);
+                            border: 1px solid rgba(255, 255, 255, {0.1 *
+                            $subtitleAnimation.backgroundOpacity});
+                            box-shadow: 0 8px 32px rgba(0, 0, 0, {0.6 *
+                            $subtitleAnimation.backgroundOpacity}), inset 0 0 0 1px rgba(255, 255, 255, {0.15 *
+                            $subtitleAnimation.backgroundOpacity});
                         "
                         on:mousedown={startSubtitleDrag}
                         on:click|stopPropagation={handleSubtitleClick}
@@ -446,13 +512,20 @@
                         {#if isEditingText}
                             <textarea
                                 class="subtitle-textarea"
-                                style="font-size: {$subtitleAnimation.fontSize}px; color: {hexOrRgbToRgba($subtitleAnimation.fontColor, $subtitleAnimation.fontOpacity)}; font-family: {$subtitleAnimation.customFont};"
+                                style="font-size: {$subtitleAnimation.fontSize}px; color: {hexOrRgbToRgba(
+                                    $subtitleAnimation.fontColor,
+                                    $subtitleAnimation.fontOpacity,
+                                )}; font-family: {$subtitleAnimation.customFont};"
                                 value={activeSubtitle.content}
-                                on:input={(e) => updateSubtitleText(activeSubtitle, e.currentTarget.value)}
-                                on:blur={() => isEditingText = false}
+                                on:input={(e) =>
+                                    updateSubtitleText(
+                                        activeSubtitle,
+                                        e.currentTarget.value,
+                                    )}
+                                on:blur={() => (isEditingText = false)}
                                 on:click|stopPropagation
                                 on:keydown={(e) => {
-                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                    if (e.key === "Enter" && !e.shiftKey) {
                                         e.preventDefault();
                                         isEditingText = false;
                                     }
@@ -462,23 +535,34 @@
                         {:else}
                             <!-- svelte-ignore a11y_click_events_have_key_events -->
                             <!-- svelte-ignore a11y_no_static_element_interactions -->
-                            <div 
+                            <div
                                 class="subtitle-text-render"
-                                style="font-size: {$subtitleAnimation.fontSize}px; color: {hexOrRgbToRgba($subtitleAnimation.fontColor, $subtitleAnimation.fontOpacity)}; font-family: {$subtitleAnimation.customFont};"
-                                on:dblclick={() => isEditingText = true}
+                                style="font-size: {$subtitleAnimation.fontSize}px; color: {hexOrRgbToRgba(
+                                    $subtitleAnimation.fontColor,
+                                    $subtitleAnimation.fontOpacity,
+                                )}; font-family: {$subtitleAnimation.customFont};"
+                                on:dblclick={() => (isEditingText = true)}
                             >
                                 {activeSubtitle.content}
-                                <span class="edit-hint">Double-click to edit text</span>
+                                <span class="edit-hint"
+                                    >Double-click to edit text</span
+                                >
                             </div>
                         {/if}
 
                         <!-- Resize Handle in Bottom-Right Corner -->
                         <!-- svelte-ignore a11y_no_static_element_interactions -->
-                        <div class="resize-handle" on:mousedown={startSubtitleResize}></div>
+                        <div
+                            class="resize-handle"
+                            on:mousedown={startSubtitleResize}
+                        ></div>
                     </div>
                 {:else}
                     <!-- Insert new subtitle at playhead if no segment is active -->
-                    <button class="add-subtitle-btn animate-fade-in" on:click|stopPropagation={addSubtitleAtPlayhead}>
+                    <button
+                        class="add-subtitle-btn animate-fade-in"
+                        on:click|stopPropagation={addSubtitleAtPlayhead}
+                    >
                         <span class="plus-icon">+</span> Add Subtitle
                     </button>
                 {/if}
@@ -487,62 +571,104 @@
             <!-- Render Overlay -->
             {#if showRenderOverlay}
                 <!-- svelte-ignore a11y_no_static_element_interactions -->
-                <div class="render-overlay animate-fade-in" on:mousedown|stopPropagation>
+                <div
+                    class="render-overlay animate-fade-in"
+                    on:mousedown|stopPropagation
+                >
                     <div class="render-card">
-                        <button class="close-overlay-btn" on:click={closeRenderOverlay}>×</button>
-                        
+                        <button
+                            class="close-overlay-btn"
+                            on:click={closeRenderOverlay}>×</button
+                        >
+
                         {#if isRendering}
                             <h3 class="render-title">Rendering Video</h3>
-                            <p class="render-subtitle">Burning custom styled subtitles into your video file...</p>
-                            
+                            <p class="render-subtitle">
+                                Burning custom styled subtitles into your video
+                                file...
+                            </p>
+
                             <div class="progress-container">
                                 <div class="progress-bar-outer">
-                                    <div class="progress-bar-inner" style="width: {renderProgress}%"></div>
+                                    <div
+                                        class="progress-bar-inner"
+                                        style="width: {renderProgress}%"
+                                    ></div>
                                 </div>
-                                <span class="progress-text">{renderProgress}%</span>
+                                <span class="progress-text"
+                                    >{renderProgress}%</span
+                                >
                             </div>
                         {:else if renderSuccess}
                             <div class="success-badge">✓</div>
                             <h3 class="render-title">Render Complete!</h3>
-                            <p class="render-subtitle">Your video has been saved successfully with burned-in subtitles.</p>
-                            
+                            <p class="render-subtitle">
+                                Your video has been saved successfully with
+                                burned-in subtitles.
+                            </p>
+
                             <div class="success-path">{outputPath}</div>
-                            
+
                             <div class="actions-row">
-                                <button class="action-btn primary" on:click={openOutputFolder}>Open Folder</button>
-                                <button class="action-btn secondary" on:click={closeRenderOverlay}>Dismiss</button>
+                                <button
+                                    class="action-btn primary"
+                                    on:click={openOutputFolder}
+                                    >Open Folder</button
+                                >
+                                <button
+                                    class="action-btn secondary"
+                                    on:click={closeRenderOverlay}
+                                    >Dismiss</button
+                                >
                             </div>
                         {:else}
                             <h3 class="render-title">Export & Render Video</h3>
-                            <p class="render-subtitle">Save your video with all the custom subtitle adjustments and styles.</p>
-                            
+                            <p class="render-subtitle">
+                                Save your video with all the custom subtitle
+                                adjustments and styles.
+                            </p>
+
                             {#if renderError}
                                 <div class="render-error-box">
-                                    <strong>Error:</strong> {renderError}
+                                    <strong>Error:</strong>
+                                    {renderError}
                                 </div>
                             {/if}
-                            
+
                             <div class="location-picker">
-                                <span class="picker-label">Destination File:</span>
+                                <span class="picker-label"
+                                    >Destination File:</span
+                                >
                                 <div class="picker-row">
-                                    <span class="chosen-path" class:placeholder={!outputPath}>
-                                        {outputPath ? outputPath : "No output location selected"}
+                                    <span
+                                        class="chosen-path"
+                                        class:placeholder={!outputPath}
+                                    >
+                                        {outputPath
+                                            ? outputPath
+                                            : "No output location selected"}
                                     </span>
-                                    <button class="picker-btn" on:click={chooseSaveLocation}>
+                                    <button
+                                        class="picker-btn"
+                                        on:click={chooseSaveLocation}
+                                    >
                                         Browse...
                                     </button>
                                 </div>
                             </div>
-                            
+
                             <div class="actions-row">
-                                <button 
-                                    class="action-btn primary" 
-                                    disabled={!outputPath} 
+                                <button
+                                    class="action-btn primary"
+                                    disabled={!outputPath}
                                     on:click={startRendering}
                                 >
                                     Start Render
                                 </button>
-                                <button class="action-btn secondary" on:click={closeRenderOverlay}>Cancel</button>
+                                <button
+                                    class="action-btn secondary"
+                                    on:click={closeRenderOverlay}>Cancel</button
+                                >
                             </div>
                         {/if}
                     </div>
@@ -552,12 +678,17 @@
         <div class="status">
             <div class="status-left">
                 {#if loaded}
-                    <span class="success-dot"></span> Streaming high-quality local media
+                    <span class="success-dot"></span> Streaming high-quality local
+                    media
                 {:else}
-                    <div class="mini-spinner"></div> Buffering video stream...
+                    <div class="mini-spinner"></div>
+                     Buffering video stream...
                 {/if}
             </div>
-            <button class="export-btn" on:click={() => showRenderOverlay = true}>
+            <button
+                class="export-btn"
+                on:click={() => (showRenderOverlay = true)}
+            >
                 Export Video
             </button>
         </div>
@@ -581,19 +712,17 @@
 
     .video-container {
         position: relative;
-        width: 100%;
-        max-height: 80vh;
+        max-width: 100%;
+        max-height: 75vh;
         background: #000000;
-        display: flex;
-        align-items: center;
-        justify-content: center;
+        display: block;
+        margin: 0 auto;
         overflow: visible; /* Let popover float nicely */
     }
-    
+
     .video {
         width: 100%;
         height: 100%;
-        object-fit: contain;
         display: block;
     }
 
@@ -633,7 +762,8 @@
     .subtitle-text-render {
         width: 100%;
         word-wrap: break-word;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+            sans-serif;
         font-weight: 600;
         line-height: 1.4;
         position: relative;
@@ -706,7 +836,10 @@
         align-items: center;
         gap: 6px;
         box-shadow: 0 4px 16px rgba(0, 188, 212, 0.4);
-        transition: background 0.15s, transform 0.15s, box-shadow 0.15s;
+        transition:
+            background 0.15s,
+            transform 0.15s,
+            box-shadow 0.15s;
     }
 
     .add-subtitle-btn:hover {
@@ -740,7 +873,8 @@
         flex-direction: column;
         gap: 14px;
         z-index: 100;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+            sans-serif;
         box-sizing: border-box;
         text-align: left;
     }
@@ -812,7 +946,10 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        transition: background 0.15s, border-color 0.15s, color 0.15s;
+        transition:
+            background 0.15s,
+            border-color 0.15s,
+            color 0.15s;
     }
 
     .adjust-btn:hover {
@@ -841,7 +978,9 @@
         font-family: inherit;
         resize: none;
         outline: none;
-        transition: border-color 0.2s, box-shadow 0.2s;
+        transition:
+            border-color 0.2s,
+            box-shadow 0.2s;
         width: 100%;
         box-sizing: border-box;
     }
@@ -850,7 +989,7 @@
         border-color: #00bcd4;
         box-shadow: 0 0 0 2px rgba(0, 188, 212, 0.2);
     }
-    
+
     .placeholder {
         width: 100%;
         aspect-ratio: 16/9;
@@ -865,26 +1004,29 @@
         border: 1px dashed #333333;
         border-radius: 12px;
         background: #111111;
-        transition: border-color 0.25s, background-color 0.25s;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        transition:
+            border-color 0.25s,
+            background-color 0.25s;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+            sans-serif;
     }
-    
+
     .placeholder:hover {
         border-color: #555555;
         background: #141414;
     }
-    
+
     .placeholder.error {
         color: #ff6b6b;
         border-color: #551a1a;
         background: #1a0808;
     }
-    
+
     .placeholder-icon {
         font-size: 2.25rem;
         opacity: 0.8;
     }
-    
+
     .error-icon {
         font-size: 2.25rem;
     }
@@ -893,7 +1035,7 @@
         color: #a8a8a8;
         letter-spacing: 0.02em;
     }
-    
+
     .spinner {
         width: 32px;
         height: 32px;
@@ -914,11 +1056,13 @@
         vertical-align: middle;
         animation: spin 0.8s linear infinite;
     }
-    
+
     @keyframes spin {
-        to { transform: rotate(360deg); }
+        to {
+            transform: rotate(360deg);
+        }
     }
-    
+
     .status {
         display: flex;
         align-items: center;
@@ -929,7 +1073,8 @@
         color: #999999;
         font-size: 0.8rem;
         font-weight: 500;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+            sans-serif;
     }
 
     .status-left {
@@ -946,7 +1091,9 @@
         font-size: 0.78rem;
         font-weight: 700;
         cursor: pointer;
-        transition: background-color 0.2s, transform 0.2s;
+        transition:
+            background-color 0.2s,
+            transform 0.2s;
         box-shadow: 0 4px 12px rgba(0, 188, 212, 0.3);
         font-family: inherit;
     }
@@ -986,11 +1133,14 @@
         padding: 30px;
         width: 100%;
         max-width: 440px;
-        box-shadow: 0 20px 50px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+        box-shadow:
+            0 20px 50px rgba(0, 0, 0, 0.6),
+            inset 0 0 0 1px rgba(255, 255, 255, 0.05);
         position: relative;
         text-align: center;
         color: #ffffff;
-        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+            sans-serif;
     }
 
     .close-overlay-btn {
@@ -1075,7 +1225,9 @@
         font-size: 0.82rem;
         font-weight: 600;
         cursor: pointer;
-        transition: background 0.15s, border-color 0.15s;
+        transition:
+            background 0.15s,
+            border-color 0.15s;
     }
 
     .picker-btn:hover {
@@ -1168,7 +1320,7 @@
         font-size: 1.25rem;
         font-weight: 700;
         color: #00bcd4;
-        font-family: 'JetBrains Mono', monospace;
+        font-family: "JetBrains Mono", monospace;
     }
 
     .success-badge {
@@ -1207,7 +1359,7 @@
         margin-right: 8px;
         box-shadow: 0 0 10px rgba(0, 230, 118, 0.6);
     }
-    
+
     .animate-fade-in {
         animation: fadeIn 0.5s cubic-bezier(0.16, 1, 0.3, 1) both;
     }
@@ -1215,26 +1367,26 @@
     .animate-scale-in {
         animation: scaleIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) both;
     }
-    
+
     @keyframes fadeIn {
-        from { 
-            opacity: 0; 
-            transform: scale(0.98) translateY(4px); 
+        from {
+            opacity: 0;
+            transform: scale(0.98) translateY(4px);
         }
-        to { 
-            opacity: 1; 
-            transform: scale(1) translateY(0); 
+        to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
         }
     }
 
     @keyframes scaleIn {
         from {
             opacity: 0;
-            transform: scale(0.92) translateY(8px);
+            transform: translate(-50%, -50%) scale(0.92) translateY(8px);
         }
         to {
             opacity: 1;
-            transform: scale(1) translateY(0);
+            transform: translate(-50%, -50%) scale(1) translateY(0);
         }
     }
 </style>

@@ -251,13 +251,17 @@ def run():
 
                     if sub_id != prev_sub_id or active_frame_bytes is None:
                         # Subtitle content or segment changed — update state and screenshot
+                        # Pre-scale fontSize for the video resolution (editor px → video px)
+                        scaled_style = dict(style)
+                        scaled_style["fontSize"] = style.get("fontSize", 28) * scale_factor
+
                         render_state = {
                             "content": active_sub["content"],
                             "subX": pos.get("subX", 50),
                             "subY": pos.get("subY", 85),
                             "subWidth": pos.get("subWidth", 70),
                             "scaleFactor": scale_factor,
-                            "style": style
+                            "style": scaled_style
                         }
 
                         # Inject custom font base64 binary on initial active frame

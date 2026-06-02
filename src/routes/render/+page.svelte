@@ -7,7 +7,7 @@
     let subY = 85;
     let subWidth = 70;
 
-    // Styling properties
+    // Styling properties (fontSize is pre-scaled by Python for video resolution)
     let fontSize = 28;
     let fontColor = "#ffffff";
     let backgroundColor = "rgba(10, 10, 10, 0.85)";
@@ -116,7 +116,7 @@
                 transform: translate(-50%, -50%);
                 background: {hexOrRgbToRgba(backgroundColor, backgroundOpacity)};
                 font-family: {customFont || '-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif'};
-                font-size: {fontSize * scaleFactor}px;
+                font-size: {fontSize}px;
                 color: {hexOrRgbToRgba(fontColor, fontOpacity)};
                 padding: {10 * scaleFactor}px {24 * scaleFactor}px;
                 border-radius: {8 * scaleFactor}px;
@@ -130,7 +130,7 @@
             <div 
                 class="subtitle-text-render"
                 style="
-                    font-size: {fontSize * scaleFactor}px; 
+                    font-size: {fontSize}px; 
                     color: {hexOrRgbToRgba(fontColor, fontOpacity)}; 
                     font-family: {customFont || '-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif'};
                     line-height: 1.4;

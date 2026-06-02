@@ -244,9 +244,11 @@ async fn run_render(app: AppHandle, config_json: String) -> Result<PyResponse, S
                 format!("Failed to spawn render process: {}", e)
             })?;
 
-        // Read stderr in a thread to capture PROGRESS lines
+        // Read stderr in a thread to capture PROGRESS lines and stderr log
         let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
         let app_clone = app.clone();
+        let stderr_log = std::sync::Arc::new(std::sync::Mutex::new(String::new()));
+        let stderr_log_clone = stderr_log.clone();
         let stderr_handle = std::thread::spawn(move || {
             let reader = BufReader::new(stderr);
             for line in reader.lines() {
@@ -255,6 +257,10 @@ async fn run_render(app: AppHandle, config_json: String) -> Result<PyResponse, S
                         if let Ok(pct) = pct_str.trim().parse::<f64>() {
                             let _ = app_clone.emit("render-progress", pct);
                         }
+                    } else {
+                        let mut log = stderr_log_clone.lock().unwrap();
+                        log.push_str(&line);
+                        log.push('\n');
                     }
                 }
             }
@@ -270,13 +276,22 @@ async fn run_render(app: AppHandle, config_json: String) -> Result<PyResponse, S
             }
         }
 
-        let _ = child.wait();
+        let exit_status = child.wait();
         let _ = stderr_handle.join();
 
         // Clean up config file
         let _ = std::fs::remove_file(config_path);
 
-        let res: PyResponse = serde_json::from_str(&stdout_text).map_err(|e| format!("Invalid JSON response: {}, stdout: {}", e, stdout_text))?;
+        let err_log = stderr_log.lock().unwrap().clone();
+        let res: PyResponse = serde_json::from_str(&stdout_text).map_err(|e| {
+            format!(
+                "Invalid JSON response: {}, exit status: {:?}, stdout: '{}', stderr: '{}'",
+                e,
+                exit_status,
+                stdout_text.trim(),
+                err_log.trim()
+            )
+        })?;
         Ok(res)
     })
     .await
