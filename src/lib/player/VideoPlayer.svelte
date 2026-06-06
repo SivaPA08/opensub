@@ -13,6 +13,7 @@
     import { save } from "@tauri-apps/plugin-dialog";
     import { revealItemInDir } from "@tauri-apps/plugin-opener";
     import { listen } from "@tauri-apps/api/event";
+    import GlitchText from "../animations/GlitchText.svelte";
 
     let videoElement: HTMLVideoElement;
     let videoSrc = "";
@@ -282,6 +283,8 @@
                     customFontFile: $subtitleAnimation.customFontFile,
                     fontOpacity: $subtitleAnimation.fontOpacity,
                     backgroundOpacity: $subtitleAnimation.backgroundOpacity,
+                    animationType: $subtitleAnimation.animationType ?? 'none',
+                    animationSpeed: $subtitleAnimation.animationSpeed ?? 200,
                 },
                 position: {
                     subX: subX,
@@ -480,12 +483,13 @@
                     <!-- svelte-ignore a11y_click_events_have_key_events -->
                     <!-- svelte-ignore a11y_no_static_element_interactions -->
                     <div
-                        class="subtitle-block animate-scale-in"
+                        class="subtitle-block {($subtitleAnimation.animationType ?? 'none') === 'scale-in' ? 'animate-scale-in' : ($subtitleAnimation.animationType ?? 'none') === 'pop-up' ? 'animate-pop-up' : ''}"
                         style="
                             left: {subX}%; 
                             top: {subY}%; 
                             width: {subWidth}%; 
                             transform: translate(-50%, -50%);
+                            --anim-speed: {$subtitleAnimation.animationSpeed ?? 200}ms;
                             background: {hexOrRgbToRgba(
                             $subtitleAnimation.backgroundColor,
                             $subtitleAnimation.backgroundOpacity,
@@ -543,7 +547,16 @@
                                 )}; font-family: {$subtitleAnimation.customFont};"
                                 on:dblclick={() => (isEditingText = true)}
                             >
-                                {activeSubtitle.content}
+                                {#if ($subtitleAnimation.animationType ?? 'none') === 'glitch'}
+                                    <GlitchText
+                                        text={activeSubtitle.content}
+                                        speed={($subtitleAnimation.animationSpeed ?? 200) / 200}
+                                        enableShadows={true}
+                                        enableOnHover={false}
+                                    />
+                                {:else}
+                                    {activeSubtitle.content}
+                                {/if}
                                 <span class="edit-hint"
                                     >Double-click to edit text</span
                                 >
@@ -1365,7 +1378,13 @@
     }
 
     .animate-scale-in {
-        animation: scaleIn 0.2s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+        animation: scaleIn var(--anim-speed, 200ms) cubic-bezier(0.34, 1.56, 0.64, 1) both;
+    }
+
+    .animate-pop-up {
+        animation: popText var(--anim-speed, 240ms) cubic-bezier(0.2, 0.8, 0.2, 1) both;
+        transform-origin: center;
+        will-change: transform, opacity, filter;
     }
 
     @keyframes fadeIn {
@@ -1387,6 +1406,24 @@
         to {
             opacity: 1;
             transform: translate(-50%, -50%) scale(1) translateY(0);
+        }
+    }
+
+    @keyframes popText {
+        0% {
+            opacity: 0;
+            transform: translate(-50%, -50%) scale(0.88) translateY(8px);
+            filter: blur(2px);
+        }
+        65% {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1.04) translateY(0);
+            filter: blur(0);
+        }
+        100% {
+            opacity: 1;
+            transform: translate(-50%, -50%) scale(1) translateY(0);
+            filter: blur(0);
         }
     }
 </style>

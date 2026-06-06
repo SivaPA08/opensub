@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
+    import GlitchText from "$lib/animations/GlitchText.svelte";
 
     // Subtitle properties
     let content = "";
@@ -14,6 +15,8 @@
     let customFont = "";
     let fontOpacity = 1.0;
     let backgroundOpacity = 0.85;
+    let animationType = "none";
+    let animationSpeed = 200;
 
     // Scaling factor (editor px -> video px)
     let scaleFactor = 1.0;
@@ -61,6 +64,8 @@
                 customFont?: string;
                 fontOpacity?: number;
                 backgroundOpacity?: number;
+                animationType?: string;
+                animationSpeed?: number;
             };
             customFontBase64?: string; // Optional: Inject base64 font data directly
         }) => {
@@ -78,6 +83,8 @@
                 if (s.customFont !== undefined) customFont = s.customFont;
                 if (s.fontOpacity !== undefined) fontOpacity = s.fontOpacity;
                 if (s.backgroundOpacity !== undefined) backgroundOpacity = s.backgroundOpacity;
+                if (s.animationType !== undefined) animationType = s.animationType;
+                if (s.animationSpeed !== undefined) animationSpeed = s.animationSpeed;
             }
 
             if (state.customFontBase64 && state.style?.customFont) {
@@ -127,17 +134,26 @@
                 box-shadow: 0 {8 * scaleFactor}px {32 * scaleFactor}px rgba(0, 0, 0, {0.6 * backgroundOpacity}), inset 0 0 0 {1 * scaleFactor}px rgba(255, 255, 255, {0.15 * backgroundOpacity});
             "
         >
-            <div 
-                class="subtitle-text-render"
-                style="
-                    font-size: {fontSize}px; 
-                    color: {hexOrRgbToRgba(fontColor, fontOpacity)}; 
-                    font-family: {customFont || '-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif'};
-                    line-height: 1.4;
-                "
-            >
-                {content}
-            </div>
+            {#if animationType === 'glitch'}
+                <GlitchText
+                    text={content}
+                    speed={animationSpeed / 200}
+                    enableShadows={true}
+                    enableOnHover={false}
+                />
+            {:else}
+                <div 
+                    class="subtitle-text-render"
+                    style="
+                        font-size: {fontSize}px; 
+                        color: {hexOrRgbToRgba(fontColor, fontOpacity)}; 
+                        font-family: {customFont || '-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif'};
+                        line-height: 1.4;
+                    "
+                >
+                    {content}
+                </div>
+            {/if}
         </div>
     {/if}
 </div>

@@ -217,12 +217,19 @@ def run():
             )
 
             # -------------------------------------------------------------------------
+            # -------------------------------------------------------------------------
             # Frame-by-frame screenshot rendering loop
             # -------------------------------------------------------------------------
             prev_sub_id = None
             empty_frame_bytes = None
             active_frame_bytes = None
 
+            # Determine if subtitle uses a continuous animation (needs per-frame capture)
+            animation_type = style.get("animationType", "none")
+            is_animated = animation_type not in ("none", "", "pop-up", "scale-in")
+            frame_interval_ms = round(1000 / fps)  # time between frames in ms
+
+            print(f"DEBUG: Animation type: '{animation_type}', is_animated (per-frame): {is_animated}", file=sys.stderr, flush=True)
             print(f"DEBUG: Starting frame loop for {total_frames} frames...", file=sys.stderr, flush=True)
 
             for frame_idx in range(total_frames):
@@ -249,7 +256,7 @@ def run():
                     # Active subtitle found
                     sub_id = (active_sub["start"], active_sub["end"], active_sub["content"])
 
-                    if sub_id != prev_sub_id or active_frame_bytes is None:
+                    if sub_id != prev_sub_id or active_frame_bytes is None or is_animated:
                         # Subtitle content or segment changed — update state and screenshot
                         # Pre-scale fontSize for the video resolution (editor px → video px)
                         scaled_style = dict(style)
@@ -270,6 +277,10 @@ def run():
 
                         # Set state in page Svelte component
                         page.evaluate("state => window.setRenderState(state)", render_state)
+
+                        # For animated subtitles, wait one frame interval for CSS animation to advance
+                        if is_animated:
+                            page.wait_for_timeout(frame_interval_ms)
 
                         # Capture transparent PNG subtitle block frame
                         active_frame_bytes = page.screenshot(type="png", omit_background=True)

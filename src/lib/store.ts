@@ -23,6 +23,8 @@ export type SubtitleAnimationStyle = {
     customFontFile: string; // Filename on disk
     fontOpacity: number; // 0 to 1
     backgroundOpacity: number; // 0 to 1
+    animationType?: string;
+    animationSpeed?: number;
 };
 
 export const subtitleAnimation = writable<SubtitleAnimationStyle>({
@@ -32,5 +34,7 @@ export const subtitleAnimation = writable<SubtitleAnimationStyle>({
     customFont: '',
     customFontFile: '',
     fontOpacity: 1.0,
-    backgroundOpacity: 0.85
+    backgroundOpacity: 0.85,
+    animationType: 'none',
+    animationSpeed: 200
 });
