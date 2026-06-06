@@ -14,6 +14,7 @@
     import { revealItemInDir } from "@tauri-apps/plugin-opener";
     import { listen } from "@tauri-apps/api/event";
     import GlitchText from "../animations/GlitchText.svelte";
+    import SplitText from "../animations/SplitText.svelte";
 
     let videoElement: HTMLVideoElement;
     let videoSrc = "";
@@ -553,6 +554,12 @@
                                         speed={($subtitleAnimation.animationSpeed ?? 200) / 200}
                                         enableShadows={true}
                                         enableOnHover={false}
+                                    />
+                                {:else if ($subtitleAnimation.animationType ?? 'none') === 'split-text'}
+                                    <SplitText
+                                        text={activeSubtitle.content}
+                                        duration={($subtitleAnimation.animationSpeed ?? 200) / 1000}
+                                        delay={(($subtitleAnimation.animationSpeed ?? 200) / 10) || 10}
                                     />
                                 {:else}
                                     {activeSubtitle.content}

@@ -42,6 +42,7 @@
                 <option value="pop-up">Pop Up</option>
                 <option value="scale-in">Scale In</option>
                 <option value="glitch">Glitch Text</option>
+                <option value="split-text">Split Text</option>
             </select>
         </div>
     </div>

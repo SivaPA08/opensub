@@ -1,6 +1,7 @@
 <script lang="ts">
     import { onMount } from "svelte";
     import GlitchText from "$lib/animations/GlitchText.svelte";
+    import SplitText from "$lib/animations/SplitText.svelte";
 
     // Subtitle properties
     let content = "";
@@ -151,7 +152,15 @@
                         line-height: 1.4;
                     "
                 >
-                    {content}
+                    {#if animationType === 'split-text'}
+                        <SplitText
+                            text={content}
+                            duration={animationSpeed / 1000}
+                            delay={(animationSpeed / 10) || 10}
+                        />
+                    {:else}
+                        {content}
+                    {/if}
                 </div>
             {/if}
         </div>
