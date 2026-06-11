@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { videoDuration, videoCurrentTime, subtitle } from "../store.js";
+    import { videoDuration, videoCurrentTime, subtitle, selectedSubtitleIndices, updateSubtitleProperties } from "../store.js";
 
     type Clip = {
         id: number;
@@ -103,11 +103,16 @@
 
     // Sync from local clips back to $subtitle store in real-time
     $: if (clips && (drag || resize)) {
-        const updated = clips.map(clip => ({
-            start: clip.start,
-            end: clip.start + clip.length,
-            content: clip.title
-        }));
+        const updated = clips.map((clip, index) => {
+            // Keep original properties and update positioning
+            const original = $subtitle[index] || {};
+            return {
+                ...original,
+                start: clip.start,
+                end: clip.start + clip.length,
+                content: clip.title
+            };
+        });
         subtitle.set(updated);
         // Sync our serialization key so we avoid triggering the store-to-clips reactive block
         lastSubtitlesKey = updated.map(s => `${s.start}-${s.end}-${s.content}`).join('|');
@@ -116,12 +121,36 @@
     let drag: DragState = null;
     let resize: ResizeState = null;
 
+    type MultiDragState = {
+        id: number;
+        start: number;
+        track: number;
+    };
+    let multiDragStates: MultiDragState[] = [];
+
+    type MultiResizeState = {
+        id: number;
+        start: number;
+        length: number;
+    };
+    let multiResizeStates: MultiResizeState[] = [];
+
+    let isBoxSelecting = false;
+    let boxStart = { x: 0, y: 0 };
+    let boxCurrent = { x: 0, y: 0 };
+
     let tracksRef: HTMLDivElement;
     let rulerRef: HTMLDivElement;
 
     /* =========================
-	   SCROLL SYNC
+	   SCROLL SYNC AND KEYBOARD
 	========================= */
+
+    function handleKeyDown(e: KeyboardEvent): void {
+        if (e.key === "Escape") {
+            selectedSubtitleIndices.set([]);
+        }
+    }
 
     onMount(() => {
         if (!tracksRef || !rulerRef) return;
@@ -129,14 +158,38 @@
         tracksRef.addEventListener("scroll", () => {
             rulerRef.scrollLeft = tracksRef.scrollLeft;
         });
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => {
+            window.removeEventListener("keydown", handleKeyDown);
+        };
     });
 
     /* =========================
-	   DRAGGING
+	   DRAGGING (MULTI-DRAG)
 	========================= */
 
     function down(e: MouseEvent, clip: Clip): void {
         e.stopPropagation();
+
+        const index = clip.id - 1;
+
+        selectedSubtitleIndices.update(existing => {
+            if (e.shiftKey) {
+                if (existing.includes(index)) {
+                    return existing.filter(i => i !== index);
+                } else {
+                    return [...existing, index];
+                }
+            } else {
+                if (existing.includes(index)) {
+                    return existing;
+                }
+                return [index];
+            }
+        });
+
+        const selectedClips = clips.filter((_, idx) => $selectedSubtitleIndices.includes(idx));
 
         drag = {
             id: clip.id,
@@ -146,8 +199,13 @@
             track: clip.track,
         };
 
-        window.addEventListener("mousemove", move);
+        multiDragStates = selectedClips.map(c => ({
+            id: c.id,
+            start: c.start,
+            track: c.track
+        }));
 
+        window.addEventListener("mousemove", move);
         window.addEventListener("mouseup", up);
     }
 
@@ -155,41 +213,54 @@
         if (!drag) return;
 
         let dx = e.clientX - drag.x;
-
         let dy = e.clientY - drag.y;
 
-        let clip = clips.find((x) => x.id === drag!.id);
-
-        if (!clip) return;
-
         const duration = $videoDuration || 120;
-        let newStart = drag.start + dx / zoom;
-        newStart = Math.max(0, Math.min(duration - clip.length, newStart));
-        clip.start = parseFloat(newStart.toFixed(3));
+        const deltaStart = dx / zoom;
+        const deltaTrack = Math.round(dy / 60);
 
-        let newTrack = drag.track + Math.round(dy / 60);
-
-        newTrack = Math.max(0, Math.min(tracks.length - 1, newTrack));
-
-        clip.track = newTrack;
-
-        clips = [...clips];
+        clips = clips.map(clip => {
+            const dragInfo = multiDragStates.find(x => x.id === clip.id);
+            if (dragInfo) {
+                let newStart = dragInfo.start + deltaStart;
+                newStart = Math.max(0, Math.min(duration - clip.length, newStart));
+                
+                let newTrack = dragInfo.track + deltaTrack;
+                newTrack = Math.max(0, Math.min(tracks.length - 1, newTrack));
+                
+                return {
+                    ...clip,
+                    start: parseFloat(newStart.toFixed(3)),
+                    track: newTrack
+                };
+            }
+            return clip;
+        });
     }
 
     function up(): void {
         window.removeEventListener("mousemove", move);
-
         window.removeEventListener("mouseup", up);
-
         drag = null;
+        multiDragStates = [];
     }
 
     /* =========================
-	   RESIZE
+	   RESIZE (MULTI-RESIZE)
 	========================= */
 
     function resizeStart(e: MouseEvent, clip: Clip, side: ResizeSide): void {
         e.stopPropagation();
+
+        const index = clip.id - 1;
+        selectedSubtitleIndices.update(existing => {
+            if (existing.includes(index)) {
+                return existing;
+            }
+            return [index];
+        });
+
+        const selectedClips = clips.filter((_, idx) => $selectedSubtitleIndices.includes(idx));
 
         resize = {
             id: clip.id,
@@ -199,8 +270,13 @@
             length: clip.length,
         };
 
-        window.addEventListener("mousemove", resizeMove);
+        multiResizeStates = selectedClips.map(c => ({
+            id: c.id,
+            start: c.start,
+            length: c.length
+        }));
 
+        window.addEventListener("mousemove", resizeMove);
         window.addEventListener("mouseup", resizeEnd);
     }
 
@@ -208,36 +284,121 @@
         if (!resize) return;
 
         let dx = (e.clientX - resize.x) / zoom;
-
-        let clip = clips.find((x) => x.id === resize!.id);
-
-        if (!clip) return;
-
         const duration = $videoDuration || 120;
-        if (resize.side === "right") {
-            let newLength = resize.length + dx;
-            const maxLength = duration - clip.start;
-            clip.length = Math.max(0.1, Math.min(maxLength, parseFloat(newLength.toFixed(3))));
-        } else {
-            let newStart = resize.start + dx;
 
-            let newLength = resize.length - dx;
-
-            if (newLength > 0.1 && newStart >= 0) {
-                clip.start = parseFloat(newStart.toFixed(3));
-                clip.length = parseFloat(newLength.toFixed(3));
+        clips = clips.map(clip => {
+            const resizeInfo = multiResizeStates.find(x => x.id === clip.id);
+            if (resizeInfo) {
+                if (resize!.side === "right") {
+                    let newLength = resizeInfo.length + dx;
+                    const maxLength = duration - clip.start;
+                    return {
+                        ...clip,
+                        length: Math.max(0.1, Math.min(maxLength, parseFloat(newLength.toFixed(3))))
+                    };
+                } else {
+                    let newStart = resizeInfo.start + dx;
+                    let newLength = resizeInfo.length - dx;
+                    if (newLength > 0.1 && newStart >= 0) {
+                        return {
+                            ...clip,
+                            start: parseFloat(newStart.toFixed(3)),
+                            length: parseFloat(newLength.toFixed(3))
+                        };
+                    }
+                }
             }
-        }
-
-        clips = [...clips];
+            return clip;
+        });
     }
 
     function resizeEnd(): void {
         window.removeEventListener("mousemove", resizeMove);
-
         window.removeEventListener("mouseup", resizeEnd);
-
         resize = null;
+        multiResizeStates = [];
+    }
+
+    /* =========================
+	   BOX SELECTION (RUBBER BAND)
+	========================= */
+
+    function startBoxSelection(e: MouseEvent): void {
+        // Only left click starts selection
+        if (e.button !== 0 || !tracksRef) return;
+
+        const rect = tracksRef.getBoundingClientRect();
+        const scrollLeft = tracksRef.scrollLeft;
+        const scrollTop = tracksRef.scrollTop;
+
+        const clickX = e.clientX - rect.left + scrollLeft;
+        const clickY = e.clientY - rect.top + scrollTop;
+
+        // Only start if click is in tracks content area (right of 120px label)
+        if (clickX < 120) return;
+
+        isBoxSelecting = true;
+        boxStart = { x: clickX, y: clickY };
+        boxCurrent = { x: clickX, y: clickY };
+
+        if (!e.shiftKey) {
+            selectedSubtitleIndices.set([]);
+        }
+
+        window.addEventListener("mousemove", handleBoxSelectionMove);
+        window.addEventListener("mouseup", handleBoxSelectionEnd);
+    }
+
+    function handleBoxSelectionMove(e: MouseEvent): void {
+        if (!isBoxSelecting || !tracksRef) return;
+
+        const rect = tracksRef.getBoundingClientRect();
+        const scrollLeft = tracksRef.scrollLeft;
+        const scrollTop = tracksRef.scrollTop;
+
+        boxCurrent = {
+            x: Math.max(120, e.clientX - rect.left + scrollLeft),
+            y: e.clientY - rect.top + scrollTop
+        };
+
+        const selectMinX = Math.min(boxStart.x, boxCurrent.x) - 120;
+        const selectMaxX = Math.max(boxStart.x, boxCurrent.x) - 120;
+        const selectMinY = Math.min(boxStart.y, boxCurrent.y);
+        const selectMaxY = Math.max(boxStart.y, boxCurrent.y);
+
+        const overlappingIndices: number[] = [];
+        clips.forEach((clip, index) => {
+            const clipLeft = clip.start * zoom;
+            const clipRight = (clip.start + clip.length) * zoom;
+            const clipTop = clip.track * 61 + 8;
+            const clipBottom = clip.track * 61 + 8 + 42;
+
+            const overlapsX = clipLeft < selectMaxX && clipRight > selectMinX;
+            const overlapsY = clipTop < selectMaxY && clipBottom > selectMinY;
+
+            if (overlapsX && overlapsY) {
+                overlappingIndices.push(index);
+            }
+        });
+
+        if (e.shiftKey) {
+            selectedSubtitleIndices.update(existing => {
+                const unique = new Set([...existing, ...overlappingIndices]);
+                return Array.from(unique);
+            });
+        } else {
+            selectedSubtitleIndices.set(overlappingIndices);
+        }
+    }
+
+    function handleBoxSelectionEnd(): void {
+        isBoxSelecting = false;
+        window.removeEventListener("mousemove", handleBoxSelectionMove);
+        window.removeEventListener("mouseup", handleBoxSelectionEnd);
+    }
+
+    function selectAll(): void {
+        selectedSubtitleIndices.set(clips.map((_, index) => index));
     }
 
     let isDraggingPlayhead = false;
@@ -292,6 +453,10 @@
             {zoom.toFixed(1)}x
         </span>
 
+        <button class="select-all-btn" on:click={selectAll}>
+            Select All
+        </button>
+
         <div class="time-display">
             <span class="current">{formatTime($videoCurrentTime)}</span>
             <span class="separator">/</span>
@@ -316,8 +481,21 @@
         </div>
     </div>
 
-    <div class="tracks" bind:this={tracksRef}>
+    <div class="tracks" bind:this={tracksRef} on:mousedown={startBoxSelection}>
         <div class="tracks-inner" style="width: {timelineDuration * zoom + 120}px;">
+            <!-- Selection Box Overlay -->
+            {#if isBoxSelecting}
+                <div
+                    class="selection-box"
+                    style="
+                        left: {Math.min(boxStart.x, boxCurrent.x)}px;
+                        top: {Math.min(boxStart.y, boxCurrent.y)}px;
+                        width: {Math.abs(boxStart.x - boxCurrent.x)}px;
+                        height: {Math.abs(boxStart.y - boxCurrent.y)}px;
+                    "
+                ></div>
+            {/if}
+
             <!-- Playhead Tracker Line and Drag Handle -->
             <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div 
@@ -352,6 +530,7 @@
                             <!-- svelte-ignore a11y_no_static_element_interactions -->
                             <div
                                 class="clip"
+                                class:selected={$selectedSubtitleIndices.includes(clip.id - 1)}
                                 role="button"
                                 tabindex="0"
                                 style="
@@ -585,6 +764,14 @@
         filter: brightness(1.08);
     }
 
+    .clip.selected {
+        outline: 2.5px solid #00bcd4;
+        outline-offset: 1px;
+        box-shadow: 
+            0 0 16px rgba(0, 188, 212, 0.65),
+            0 2px 8px rgba(0, 0, 0, 0.45);
+    }
+
     .title {
         width: 100%;
         text-align: center;
@@ -771,5 +958,43 @@
         letter-spacing: 0.05em;
         text-transform: uppercase;
         pointer-events: none;
+    }
+
+    /* =========================
+	   SELECTION BOX & SELECT ALL
+	========================= */
+    .selection-box {
+        position: absolute;
+        background: rgba(0, 188, 212, 0.15);
+        border: 1.5px solid #00bcd4;
+        border-radius: 4px;
+        pointer-events: none;
+        z-index: 95;
+        box-shadow: 0 0 8px rgba(0, 188, 212, 0.2);
+    }
+
+    .select-all-btn {
+        background: rgba(0, 188, 212, 0.12);
+        border: 1px solid rgba(0, 188, 212, 0.35);
+        color: #00bcd4;
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        padding: 5px 12px;
+        border-radius: 6px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .select-all-btn:hover {
+        background: #00bcd4;
+        color: #111;
+        border-color: #00bcd4;
+        box-shadow: 0 0 12px rgba(0, 188, 212, 0.45);
+    }
+
+    .select-all-btn:active {
+        transform: scale(0.95);
     }
 </style>

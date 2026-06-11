@@ -5,27 +5,26 @@
     import TypingText from "$lib/animations/TypingText.svelte";
     import DecriptText from "$lib/animations/DecriptText.svelte";
 
-    // Subtitle properties
-    let content = "";
-    let subX = 50;
-    let subY = 85;
-    let subWidth = 70;
+    type RenderSubtitle = {
+        content: string;
+        subX: number;
+        subY: number;
+        subWidth: number;
+        timeOffset: number;
+        fontSize: number;
+        fontColor: string;
+        backgroundColor: string;
+        customFont: string;
+        fontOpacity: number;
+        backgroundOpacity: number;
+        animationType: string;
+        animationSpeed: number;
+    };
 
-    // Styling properties (fontSize is pre-scaled by Python for video resolution)
-    let fontSize = 28;
-    let fontColor = "#ffffff";
-    let backgroundColor = "rgba(10, 10, 10, 0.85)";
-    let customFont = "";
-    let fontOpacity = 1.0;
-    let backgroundOpacity = 0.85;
-    let animationType = "none";
-    let animationSpeed = 200;
+    let activeSubtitles: RenderSubtitle[] = [];
 
     // Scaling factor (editor px -> video px)
     let scaleFactor = 1.0;
-
-    // Time offset (for frame-accurate animation rendering)
-    let timeOffset = 0.0;
 
     // Helper to convert hex or rgb to rgba with a specific opacity
     function hexOrRgbToRgba(color: string, opacity: number): string {
@@ -58,6 +57,23 @@
     onMount(() => {
         // Expose state update function to window for Playwright/Chromium control
         (window as any).setRenderState = (state: {
+            subtitles?: Array<{
+                content: string;
+                subX?: number;
+                subY?: number;
+                subWidth?: number;
+                timeOffset?: number;
+                style?: {
+                    fontSize?: number;
+                    fontColor?: string;
+                    backgroundColor?: string;
+                    customFont?: string;
+                    fontOpacity?: number;
+                    backgroundOpacity?: number;
+                    animationType?: string;
+                    animationSpeed?: number;
+                };
+            }>;
             content?: string;
             subX?: number;
             subY?: number;
@@ -74,29 +90,54 @@
                 animationType?: string;
                 animationSpeed?: number;
             };
-            customFontBase64?: string; // Optional: Inject base64 font data directly
+            customFontBase64?: string;
+            customFontName?: string;
         }) => {
-            if (state.content !== undefined) content = state.content;
-            if (state.subX !== undefined) subX = state.subX;
-            if (state.subY !== undefined) subY = state.subY;
-            if (state.subWidth !== undefined) subWidth = state.subWidth;
-            if (state.scaleFactor !== undefined) scaleFactor = state.scaleFactor;
-            if (state.timeOffset !== undefined) timeOffset = state.timeOffset;
-
-            if (state.style) {
-                const s = state.style;
-                if (s.fontSize !== undefined) fontSize = s.fontSize;
-                if (s.fontColor !== undefined) fontColor = s.fontColor;
-                if (s.backgroundColor !== undefined) backgroundColor = s.backgroundColor;
-                if (s.customFont !== undefined) customFont = s.customFont;
-                if (s.fontOpacity !== undefined) fontOpacity = s.fontOpacity;
-                if (s.backgroundOpacity !== undefined) backgroundOpacity = s.backgroundOpacity;
-                if (s.animationType !== undefined) animationType = s.animationType;
-                if (s.animationSpeed !== undefined) animationSpeed = s.animationSpeed;
+            if (state.subtitles !== undefined) {
+                activeSubtitles = state.subtitles.map((sub: any) => {
+                    const s = sub.style || {};
+                    return {
+                        content: sub.content || "",
+                        subX: sub.subX !== undefined ? sub.subX : 50,
+                        subY: sub.subY !== undefined ? sub.subY : 85,
+                        subWidth: sub.subWidth !== undefined ? sub.subWidth : 70,
+                        timeOffset: sub.timeOffset !== undefined ? sub.timeOffset : 0,
+                        fontSize: s.fontSize !== undefined ? s.fontSize : 28,
+                        fontColor: s.fontColor || "#ffffff",
+                        backgroundColor: s.backgroundColor || "rgba(10, 10, 10, 0.85)",
+                        customFont: s.customFont || "",
+                        fontOpacity: s.fontOpacity !== undefined ? s.fontOpacity : 1.0,
+                        backgroundOpacity: s.backgroundOpacity !== undefined ? s.backgroundOpacity : 0.85,
+                        animationType: s.animationType || "none",
+                        animationSpeed: s.animationSpeed !== undefined ? s.animationSpeed : 200,
+                    };
+                });
+            } else if (state.content !== undefined) {
+                // Fallback for single subtitle
+                const s = state.style || {};
+                activeSubtitles = [{
+                    content: state.content || "",
+                    subX: state.subX !== undefined ? state.subX : 50,
+                    subY: state.subY !== undefined ? state.subY : 85,
+                    subWidth: state.subWidth !== undefined ? state.subWidth : 70,
+                    timeOffset: state.timeOffset !== undefined ? state.timeOffset : 0,
+                    fontSize: s.fontSize !== undefined ? s.fontSize : 28,
+                    fontColor: s.fontColor || "#ffffff",
+                    backgroundColor: s.backgroundColor || "rgba(10, 10, 10, 0.85)",
+                    customFont: s.customFont || "",
+                    fontOpacity: s.fontOpacity !== undefined ? s.fontOpacity : 1.0,
+                    backgroundOpacity: s.backgroundOpacity !== undefined ? s.backgroundOpacity : 0.85,
+                    animationType: s.animationType || "none",
+                    animationSpeed: s.animationSpeed !== undefined ? s.animationSpeed : 200,
+                }];
+            } else if (state.content === "") {
+                activeSubtitles = [];
             }
 
-            if (state.customFontBase64 && state.style?.customFont) {
-                const fontName = state.style.customFont;
+            if (state.scaleFactor !== undefined) scaleFactor = state.scaleFactor;
+
+            if (state.customFontBase64 && state.customFontName) {
+                const fontName = state.customFontName;
                 const styleId = `font-face-${fontName}`;
                 let styleEl = document.getElementById(styleId);
                 if (!styleEl) {
@@ -121,74 +162,76 @@
 </script>
 
 <div class="render-container">
-    {#if content}
-        <div 
-            class="subtitle-block"
-            style="
-                left: {subX}%; 
-                top: {subY}%; 
-                width: {subWidth}%; 
-                transform: translate(-50%, -50%);
-                background: {hexOrRgbToRgba(backgroundColor, backgroundOpacity)};
-                font-family: {customFont || '-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif'};
-                font-size: {fontSize}px;
-                color: {hexOrRgbToRgba(fontColor, fontOpacity)};
-                padding: {10 * scaleFactor}px {24 * scaleFactor}px;
-                border-radius: {8 * scaleFactor}px;
-                min-height: {50 * scaleFactor}px;
-                -webkit-backdrop-filter: blur({8 * scaleFactor * backgroundOpacity}px);
-                backdrop-filter: blur({8 * scaleFactor * backgroundOpacity}px);
-                border: {1 * scaleFactor}px solid rgba(255, 255, 255, {0.1 * backgroundOpacity});
-                box-shadow: 0 {8 * scaleFactor}px {32 * scaleFactor}px rgba(0, 0, 0, {0.6 * backgroundOpacity}), inset 0 0 0 {1 * scaleFactor}px rgba(255, 255, 255, {0.15 * backgroundOpacity});
-            "
-        >
-            {#if animationType === 'glitch'}
-                <GlitchText
-                    text={content}
-                    speed={animationSpeed / 200}
-                    enableShadows={true}
-                    enableOnHover={false}
-                />
-            {:else}
-                <div 
-                    class="subtitle-text-render"
-                    style="
-                        font-size: {fontSize}px; 
-                        color: {hexOrRgbToRgba(fontColor, fontOpacity)}; 
-                        font-family: {customFont || '-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif'};
-                        line-height: 1.4;
-                    "
-                >
-                    {#if animationType === 'split-text'}
-                        <SplitText
-                            text={content}
-                            duration={animationSpeed / 1000}
-                            delay={(animationSpeed / 10) || 10}
-                            timeOffset={timeOffset}
-                        />
-                    {:else if animationType === 'typing'}
-                        <TypingText
-                            text={content}
-                            typingSpeed={animationSpeed ?? 50}
-                            timeOffset={timeOffset}
-                            loop={false}
-                            showCursor={true}
-                        />
-                    {:else if animationType === 'decrypt'}
-                        <DecriptText
-                            text={content}
-                            speed={animationSpeed ?? 50}
-                            timeOffset={timeOffset}
-                            animateOn="view"
-                            sequential={true}
-                        />
-                    {:else}
-                        {content}
-                    {/if}
-                </div>
-            {/if}
-        </div>
-    {/if}
+    {#each activeSubtitles as sub}
+        {#if sub.content}
+            <div 
+                class="subtitle-block"
+                style="
+                    left: {sub.subX}%; 
+                    top: {sub.subY}%; 
+                    width: {sub.subWidth}%; 
+                    transform: translate(-50%, -50%);
+                    background: {hexOrRgbToRgba(sub.backgroundColor, sub.backgroundOpacity)};
+                    font-family: {sub.customFont || '-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif'};
+                    font-size: {sub.fontSize}px;
+                    color: {hexOrRgbToRgba(sub.fontColor, sub.fontOpacity)};
+                    padding: {10 * scaleFactor}px {24 * scaleFactor}px;
+                    border-radius: {8 * scaleFactor}px;
+                    min-height: {50 * scaleFactor}px;
+                    -webkit-backdrop-filter: blur({8 * scaleFactor * sub.backgroundOpacity}px);
+                    backdrop-filter: blur({8 * scaleFactor * sub.backgroundOpacity}px);
+                    border: {1 * scaleFactor}px solid rgba(255, 255, 255, {0.1 * sub.backgroundOpacity});
+                    box-shadow: 0 {8 * scaleFactor}px {32 * scaleFactor}px rgba(0, 0, 0, {0.6 * sub.backgroundOpacity}), inset 0 0 0 {1 * scaleFactor}px rgba(255, 255, 255, {0.15 * sub.backgroundOpacity});
+                "
+            >
+                {#if sub.animationType === 'glitch'}
+                    <GlitchText
+                        text={sub.content}
+                        speed={sub.animationSpeed / 200}
+                        enableShadows={true}
+                        enableOnHover={false}
+                    />
+                {:else}
+                    <div 
+                        class="subtitle-text-render"
+                        style="
+                            font-size: {sub.fontSize}px; 
+                            color: {hexOrRgbToRgba(sub.fontColor, sub.fontOpacity)}; 
+                            font-family: {sub.customFont || '-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif'};
+                            line-height: 1.4;
+                        "
+                    >
+                        {#if sub.animationType === 'split-text'}
+                            <SplitText
+                                text={sub.content}
+                                duration={sub.animationSpeed / 1000}
+                                delay={(sub.animationSpeed / 10) || 10}
+                                timeOffset={sub.timeOffset}
+                            />
+                        {:else if sub.animationType === 'typing'}
+                            <TypingText
+                                text={sub.content}
+                                typingSpeed={sub.animationSpeed ?? 50}
+                                timeOffset={sub.timeOffset}
+                                loop={false}
+                                showCursor={true}
+                            />
+                        {:else if sub.animationType === 'decrypt'}
+                            <DecriptText
+                                text={sub.content}
+                                speed={sub.animationSpeed ?? 50}
+                                timeOffset={sub.timeOffset}
+                                animateOn="view"
+                                sequential={true}
+                            />
+                        {:else}
+                            {sub.content}
+                        {/if}
+                    </div>
+                {/if}
+            </div>
+        {/if}
+    {/each}
 </div>
 
 <style>

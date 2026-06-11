@@ -1,8 +1,28 @@
 <script lang="ts">
-    import { subtitleAnimation } from "../store.js";
+    import { subtitleAnimation, selectedSubtitleIndices, subtitle, updateSubtitleProperties, videoCurrentTime } from "../store.js";
 
     let animationType = "none";
     let animationSpeed = 200;
+
+    let lastInspectedIndex = -2;
+
+    $: activeIndex = $subtitle.findIndex(
+        (sub) => $videoCurrentTime >= sub.start && $videoCurrentTime <= sub.end,
+    );
+
+    $: inspectedIndex = $selectedSubtitleIndices.length > 0 ? $selectedSubtitleIndices[0] : activeIndex;
+
+    $: if (inspectedIndex !== lastInspectedIndex) {
+        lastInspectedIndex = inspectedIndex;
+        if (inspectedIndex >= 0 && $subtitle[inspectedIndex]) {
+            const sub = $subtitle[inspectedIndex];
+            animationType = sub.animationType !== undefined ? sub.animationType : ($subtitleAnimation.animationType || "none");
+            animationSpeed = sub.animationSpeed !== undefined ? sub.animationSpeed : ($subtitleAnimation.animationSpeed ?? 200);
+        } else {
+            animationType = $subtitleAnimation.animationType || "none";
+            animationSpeed = $subtitleAnimation.animationSpeed ?? 200;
+        }
+    }
 
     $: {
         subtitleAnimation.update(store => ({
@@ -10,12 +30,12 @@
             animationType,
             animationSpeed
         }));
-    }
 
-    $: {
-        if ($subtitleAnimation) {
-            animationType = $subtitleAnimation.animationType || "none";
-            animationSpeed = $subtitleAnimation.animationSpeed ?? 200;
+        if ($selectedSubtitleIndices.length > 0) {
+            updateSubtitleProperties($selectedSubtitleIndices, {
+                animationType,
+                animationSpeed
+            });
         }
     }
 </script>

@@ -9,8 +9,33 @@ export interface Subtitle {
     start: number;
     end: number;
     content: string;
+    subX?: number;
+    subY?: number;
+    subWidth?: number;
+    fontSize?: number;
+    fontColor?: string;
+    backgroundColor?: string;
+    customFont?: string;
+    customFontFile?: string;
+    fontOpacity?: number;
+    backgroundOpacity?: number;
+    animationType?: string;
+    animationSpeed?: number;
 }
 export const subtitle = writable<Subtitle[]>([]);
+export const selectedSubtitleIndices = writable<number[]>([]);
+
+export function updateSubtitleProperties(indices: number[], properties: Partial<Subtitle>) {
+    subtitle.update(items => {
+        return items.map((item, idx) => {
+            if (indices.includes(idx)) {
+                return { ...item, ...properties };
+            }
+            return item;
+        });
+    });
+}
+
 export const wordPerFrame = writable<number>(-1);
 export const subtitleFontSize = writable(28);
 

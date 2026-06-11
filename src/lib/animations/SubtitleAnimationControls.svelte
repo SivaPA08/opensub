@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { subtitleAnimation } from "../store.js";
+    import { subtitleAnimation, selectedSubtitleIndices, subtitle, updateSubtitleProperties, videoCurrentTime } from "../store.js";
     import ColorPicker from "../colorpicker/ColorPicker.svelte";
     import { invoke } from "@tauri-apps/api/core";
 
@@ -16,6 +16,38 @@
     // Track active picker sections: "font" | "bg" | null
     let activePicker: "font" | "bg" | null = null;
 
+    let lastInspectedIndex = -2;
+
+    $: activeIndex = $subtitle.findIndex(
+        (sub) => $videoCurrentTime >= sub.start && $videoCurrentTime <= sub.end,
+    );
+
+    $: inspectedIndex = $selectedSubtitleIndices.length > 0 ? $selectedSubtitleIndices[0] : activeIndex;
+
+    $: if (inspectedIndex !== lastInspectedIndex) {
+        lastInspectedIndex = inspectedIndex;
+        if (inspectedIndex >= 0 && $subtitle[inspectedIndex]) {
+            const sub = $subtitle[inspectedIndex];
+            fontSize = sub.fontSize !== undefined ? sub.fontSize : $subtitleAnimation.fontSize;
+            fontColor = sub.fontColor !== undefined ? sub.fontColor : $subtitleAnimation.fontColor;
+            backgroundColor = sub.backgroundColor !== undefined ? sub.backgroundColor : $subtitleAnimation.backgroundColor;
+            customFont = sub.customFont !== undefined ? sub.customFont : $subtitleAnimation.customFont;
+            customFontFile = sub.customFontFile !== undefined ? sub.customFontFile : ($subtitleAnimation.customFontFile || "");
+            fontOpacity = sub.fontOpacity !== undefined ? sub.fontOpacity : ($subtitleAnimation.fontOpacity ?? 1.0);
+            backgroundOpacity = sub.backgroundOpacity !== undefined ? sub.backgroundOpacity : ($subtitleAnimation.backgroundOpacity ?? 0.85);
+            customFontName = customFontFile;
+        } else {
+            fontSize = $subtitleAnimation.fontSize;
+            fontColor = $subtitleAnimation.fontColor;
+            backgroundColor = $subtitleAnimation.backgroundColor;
+            customFont = $subtitleAnimation.customFont;
+            customFontFile = $subtitleAnimation.customFontFile || "";
+            fontOpacity = $subtitleAnimation.fontOpacity ?? 1.0;
+            backgroundOpacity = $subtitleAnimation.backgroundOpacity ?? 0.85;
+            customFontName = customFontFile;
+        }
+    }
+
     // Reactively update store when local values change
     $: {
         subtitleAnimation.update(store => ({
@@ -28,6 +60,18 @@
             fontOpacity,
             backgroundOpacity
         }));
+
+        if ($selectedSubtitleIndices.length > 0) {
+            updateSubtitleProperties($selectedSubtitleIndices, {
+                fontSize,
+                fontColor,
+                backgroundColor,
+                customFont,
+                customFontFile,
+                fontOpacity,
+                backgroundOpacity
+            });
+        }
     }
 
     // Helper to dynamically parse any hex/rgb/rgba to custom opacity rgba

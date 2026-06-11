@@ -1,12 +1,14 @@
 <script lang="ts">
     import { onDestroy, onMount } from "svelte";
-    import { subtitleAnimation } from "../store.js";
     import {
         videoPath,
         videoDuration,
         videoCurrentTime,
         subtitle,
         subtitleFontSize,
+        subtitleAnimation,
+        selectedSubtitleIndices,
+        updateSubtitleProperties,
         type Subtitle,
     } from "../store.js";
     import { invoke } from "@tauri-apps/api/core";
@@ -68,6 +70,42 @@
     let subY = 85; // Vertical offset percentage
     let subWidth = 70; // Width percentage of the video wrapper
 
+    let lastActiveSub: Subtitle | undefined = undefined;
+
+    $: if (activeSubtitle && activeSubtitle !== lastActiveSub) {
+        lastActiveSub = activeSubtitle;
+        subX = activeSubtitle.subX !== undefined ? activeSubtitle.subX : 50;
+        subY = activeSubtitle.subY !== undefined ? activeSubtitle.subY : 85;
+        subWidth = activeSubtitle.subWidth !== undefined ? activeSubtitle.subWidth : 70;
+    }
+
+    // Resolved styles for active subtitle falling back to global settings
+    $: activeFontSize = (activeSubtitle && activeSubtitle.fontSize !== undefined) ? activeSubtitle.fontSize : $subtitleAnimation.fontSize;
+    $: activeFontColor = (activeSubtitle && activeSubtitle.fontColor !== undefined) ? activeSubtitle.fontColor : $subtitleAnimation.fontColor;
+    $: activeBackgroundColor = (activeSubtitle && activeSubtitle.backgroundColor !== undefined) ? activeSubtitle.backgroundColor : $subtitleAnimation.backgroundColor;
+    $: activeCustomFont = (activeSubtitle && activeSubtitle.customFont !== undefined) ? activeSubtitle.customFont : $subtitleAnimation.customFont;
+    $: activeFontOpacity = (activeSubtitle && activeSubtitle.fontOpacity !== undefined) ? activeSubtitle.fontOpacity : ($subtitleAnimation.fontOpacity ?? 1.0);
+    $: activeBackgroundOpacity = (activeSubtitle && activeSubtitle.backgroundOpacity !== undefined) ? activeSubtitle.backgroundOpacity : ($subtitleAnimation.backgroundOpacity ?? 0.85);
+    $: activeAnimationType = (activeSubtitle && activeSubtitle.animationType !== undefined) ? activeSubtitle.animationType : ($subtitleAnimation.animationType ?? 'none');
+    $: activeAnimationSpeed = (activeSubtitle && activeSubtitle.animationSpeed !== undefined) ? activeSubtitle.animationSpeed : ($subtitleAnimation.animationSpeed ?? 200);
+
+    function saveSubtitlePosition(targetSub: Subtitle, x?: number, y?: number, width?: number) {
+        const targetIndex = $subtitle.findIndex(
+            (s) => s.start === targetSub.start && s.end === targetSub.end && s.content === targetSub.content
+        );
+        if (targetIndex === -1) return;
+
+        const isSelected = $selectedSubtitleIndices.includes(targetIndex);
+        const indicesToUpdate = isSelected ? $selectedSubtitleIndices : [targetIndex];
+
+        const updates: Partial<Subtitle> = {};
+        if (x !== undefined) updates.subX = x;
+        if (y !== undefined) updates.subY = y;
+        if (width !== undefined) updates.subWidth = width;
+
+        updateSubtitleProperties(indicesToUpdate, updates);
+    }
+
     let isDraggingSubtitle = false;
     let dragStartX = 0;
     let dragStartY = 0;
@@ -104,7 +142,7 @@
     }
 
     function handleSubtitleDrag(e: MouseEvent) {
-        if (!isDraggingSubtitle || !containerRef) return;
+        if (!isDraggingSubtitle || !containerRef || !activeSubtitle) return;
 
         const rect = containerRef.getBoundingClientRect();
         const dx = e.clientX - dragStartX;
@@ -113,8 +151,13 @@
         const pctDx = (dx / rect.width) * 100;
         const pctDy = (dy / rect.height) * 100;
 
-        subX = Math.max(5, Math.min(95, initialSubX + pctDx));
-        subY = Math.max(5, Math.min(95, initialSubY + pctDy));
+        const newSubX = Math.max(5, Math.min(95, initialSubX + pctDx));
+        const newSubY = Math.max(5, Math.min(95, initialSubY + pctDy));
+
+        subX = newSubX;
+        subY = newSubY;
+
+        saveSubtitlePosition(activeSubtitle, newSubX, newSubY, undefined);
     }
 
     function stopSubtitleDrag() {
@@ -136,13 +179,16 @@
     }
 
     function handleSubtitleResize(e: MouseEvent) {
-        if (!isResizingSubtitle || !containerRef) return;
+        if (!isResizingSubtitle || !containerRef || !activeSubtitle) return;
 
         const rect = containerRef.getBoundingClientRect();
         const dx = e.clientX - resizeStartX;
         const pctDx = (dx / rect.width) * 100 * 2; // Resize from center
 
-        subWidth = Math.max(20, Math.min(95, initialSubWidth + pctDx));
+        const newSubWidth = Math.max(20, Math.min(95, initialSubWidth + pctDx));
+        subWidth = newSubWidth;
+
+        saveSubtitlePosition(activeSubtitle, undefined, undefined, newSubWidth);
     }
 
     function stopSubtitleResize() {
@@ -176,10 +222,26 @@
     }
 
     function changeSize(delta: number) {
+        const newSize = Math.max(12, Math.min(80, activeFontSize + delta));
+        updateFontSize(newSize);
+    }
+
+    function updateFontSize(newSize: number) {
         subtitleAnimation.update((style) => ({
             ...style,
-            fontSize: Math.max(12, Math.min(80, style.fontSize + delta)),
+            fontSize: newSize,
         }));
+
+        if (activeSubtitle) {
+            const targetIndex = $subtitle.findIndex(
+                (s) => s.start === activeSubtitle.start && s.end === activeSubtitle.end && s.content === activeSubtitle.content
+            );
+            if (targetIndex !== -1) {
+                const isSelected = $selectedSubtitleIndices.includes(targetIndex);
+                const indicesToUpdate = isSelected ? $selectedSubtitleIndices : [targetIndex];
+                updateSubtitleProperties(indicesToUpdate, { fontSize: newSize });
+            }
+        }
     }
 
     function updateSubtitleText(sub: Subtitle, newText: string) {
@@ -277,6 +339,17 @@
                     start: s.start,
                     end: s.end,
                     content: s.content,
+                    subX: s.subX,
+                    subY: s.subY,
+                    subWidth: s.subWidth,
+                    fontSize: s.fontSize,
+                    fontColor: s.fontColor,
+                    backgroundColor: s.backgroundColor,
+                    customFont: s.customFont,
+                    fontOpacity: s.fontOpacity,
+                    backgroundOpacity: s.backgroundOpacity,
+                    animationType: s.animationType,
+                    animationSpeed: s.animationSpeed,
                 })),
                 style: {
                     fontSize: $subtitleAnimation.fontSize,
@@ -441,7 +514,7 @@
                             <div class="popover-section">
                                 <span class="section-label"
                                     >Font Size: <span class="val-highlight"
-                                        >{$subtitleAnimation.fontSize}px</span
+                                        >{activeFontSize}px</span
                                     ></span
                                 >
                                 <div class="slider-row">
@@ -454,7 +527,8 @@
                                         type="range"
                                         min="12"
                                         max="80"
-                                        bind:value={$subtitleAnimation.fontSize}
+                                        value={activeFontSize}
+                                        on:input={(e) => updateFontSize(parseInt(e.currentTarget.value))}
                                         class="size-slider"
                                     />
                                     <button
@@ -486,32 +560,32 @@
                     <!-- svelte-ignore a11y_click_events_have_key_events -->
                     <!-- svelte-ignore a11y_no_static_element_interactions -->
                     <div
-                        class="subtitle-block {($subtitleAnimation.animationType ?? 'none') === 'scale-in' ? 'animate-scale-in' : ($subtitleAnimation.animationType ?? 'none') === 'pop-up' ? 'animate-pop-up' : ''}"
+                        class="subtitle-block {activeAnimationType === 'scale-in' ? 'animate-scale-in' : activeAnimationType === 'pop-up' ? 'animate-pop-up' : ''}"
                         style="
                             left: {subX}%; 
                             top: {subY}%; 
                             width: {subWidth}%; 
                             transform: translate(-50%, -50%);
-                            --anim-speed: {$subtitleAnimation.animationSpeed ?? 200}ms;
+                            --anim-speed: {activeAnimationSpeed}ms;
                             background: {hexOrRgbToRgba(
-                            $subtitleAnimation.backgroundColor,
-                            $subtitleAnimation.backgroundOpacity,
+                            activeBackgroundColor,
+                            activeBackgroundOpacity,
                         )};
-                            font-family: {$subtitleAnimation.customFont};
-                            font-size: {$subtitleAnimation.fontSize}px;
+                            font-family: {activeCustomFont};
+                            font-size: {activeFontSize}px;
                             color: {hexOrRgbToRgba(
-                            $subtitleAnimation.fontColor,
-                            $subtitleAnimation.fontOpacity,
+                            activeFontColor,
+                            activeFontOpacity,
                         )};
                             -webkit-backdrop-filter: blur({8 *
-                            $subtitleAnimation.backgroundOpacity}px);
+                            activeBackgroundOpacity}px);
                             backdrop-filter: blur({8 *
-                            $subtitleAnimation.backgroundOpacity}px);
+                            activeBackgroundOpacity}px);
                             border: 1px solid rgba(255, 255, 255, {0.1 *
-                            $subtitleAnimation.backgroundOpacity});
+                            activeBackgroundOpacity});
                             box-shadow: 0 8px 32px rgba(0, 0, 0, {0.6 *
-                            $subtitleAnimation.backgroundOpacity}), inset 0 0 0 1px rgba(255, 255, 255, {0.15 *
-                            $subtitleAnimation.backgroundOpacity});
+                            activeBackgroundOpacity}), inset 0 0 0 1px rgba(255, 255, 255, {0.15 *
+                            activeBackgroundOpacity});
                         "
                         on:mousedown={startSubtitleDrag}
                         on:click|stopPropagation={handleSubtitleClick}
@@ -519,10 +593,10 @@
                         {#if isEditingText}
                             <textarea
                                 class="subtitle-textarea"
-                                style="font-size: {$subtitleAnimation.fontSize}px; color: {hexOrRgbToRgba(
-                                    $subtitleAnimation.fontColor,
-                                    $subtitleAnimation.fontOpacity,
-                                )}; font-family: {$subtitleAnimation.customFont};"
+                                style="font-size: {activeFontSize}px; color: {hexOrRgbToRgba(
+                                    activeFontColor,
+                                    activeFontOpacity,
+                                )}; font-family: {activeCustomFont};"
                                 value={activeSubtitle.content}
                                 on:input={(e) =>
                                     updateSubtitleText(
@@ -544,36 +618,36 @@
                             <!-- svelte-ignore a11y_no_static_element_interactions -->
                             <div
                                 class="subtitle-text-render"
-                                style="font-size: {$subtitleAnimation.fontSize}px; color: {hexOrRgbToRgba(
-                                    $subtitleAnimation.fontColor,
-                                    $subtitleAnimation.fontOpacity,
-                                )}; font-family: {$subtitleAnimation.customFont};"
+                                style="font-size: {activeFontSize}px; color: {hexOrRgbToRgba(
+                                    activeFontColor,
+                                    activeFontOpacity,
+                                )}; font-family: {activeCustomFont};"
                                 on:dblclick={() => (isEditingText = true)}
                             >
-                                {#if ($subtitleAnimation.animationType ?? 'none') === 'glitch'}
+                                {#if activeAnimationType === 'glitch'}
                                     <GlitchText
                                         text={activeSubtitle.content}
-                                        speed={($subtitleAnimation.animationSpeed ?? 200) / 200}
+                                        speed={activeAnimationSpeed / 200}
                                         enableShadows={true}
                                         enableOnHover={false}
                                     />
-                                {:else if ($subtitleAnimation.animationType ?? 'none') === 'split-text'}
+                                {:else if activeAnimationType === 'split-text'}
                                     <SplitText
                                         text={activeSubtitle.content}
-                                        duration={($subtitleAnimation.animationSpeed ?? 200) / 1000}
-                                        delay={(($subtitleAnimation.animationSpeed ?? 200) / 10) || 10}
+                                        duration={activeAnimationSpeed / 1000}
+                                        delay={(activeAnimationSpeed / 10) || 10}
                                     />
-                                {:else if ($subtitleAnimation.animationType ?? 'none') === 'typing'}
+                                {:else if activeAnimationType === 'typing'}
                                     <TypingText
                                         text={activeSubtitle.content}
-                                        typingSpeed={$subtitleAnimation.animationSpeed ?? 50}
+                                        typingSpeed={activeAnimationSpeed}
                                         loop={false}
                                         showCursor={true}
                                     />
-                                {:else if ($subtitleAnimation.animationType ?? 'none') === 'decrypt'}
+                                {:else if activeAnimationType === 'decrypt'}
                                     <DecriptText
                                         text={activeSubtitle.content}
-                                        speed={$subtitleAnimation.animationSpeed ?? 50}
+                                        speed={activeAnimationSpeed}
                                         animateOn="view"
                                         sequential={true}
                                     />

@@ -223,74 +223,97 @@ def run():
             prev_sub_id = None
             empty_frame_bytes = None
             active_frame_bytes = None
-
-            # Determine if subtitle uses a continuous animation (needs per-frame capture)
-            animation_type = style.get("animationType", "none")
-            is_animated = animation_type not in ("none", "", "pop-up", "scale-in")
             frame_interval_ms = round(1000 / fps)  # time between frames in ms
 
-            print(f"DEBUG: Animation type: '{animation_type}', is_animated (per-frame): {is_animated}", file=sys.stderr, flush=True)
             print(f"DEBUG: Starting frame loop for {total_frames} frames...", file=sys.stderr, flush=True)
 
             for frame_idx in range(total_frames):
                 t = frame_idx / fps
 
-                # Find active subtitle segment at current timestamp
-                active_sub = None
+                # Find all active subtitle segments at current timestamp
+                active_subs = []
                 for sub in subtitles:
                     if t >= sub["start"] and t <= sub["end"]:
-                        active_sub = sub
+                        active_subs.append(sub)
+
+                # Unique identifier for the set of active subtitles and their content/times
+                sub_ids = tuple((sub["start"], sub["end"], sub["content"]) for sub in active_subs)
+
+                # Determine if any active subtitle uses a continuous animation (needs per-frame capture)
+                is_animated = False
+                for sub in active_subs:
+                    anim_type = sub.get("animationType") or style.get("animationType", "none")
+                    if anim_type not in ("none", "", "pop-up", "scale-in"):
+                        is_animated = True
                         break
 
-                if active_sub is None:
+                if not active_subs:
                     # No active subtitle in this frame
                     if prev_sub_id is not None or empty_frame_bytes is None:
                         # Clear subtitle page state
-                        page.evaluate("window.setRenderState({ content: '' })")
+                        page.evaluate("window.setRenderState({ subtitles: [] })")
                         # Capture empty frame (fully transparent PNG) once
                         empty_frame_bytes = page.screenshot(type="png", omit_background=True)
                         prev_sub_id = None
 
                     frame_bytes = empty_frame_bytes
                 else:
-                    # Active subtitle found
-                    sub_id = (active_sub["start"], active_sub["end"], active_sub["content"])
-
-                    # Calculate current frame's time offset from the start of the subtitle
-                    time_offset = t - active_sub["start"]
-
-                    if sub_id != prev_sub_id or is_animated:
-                        # Pre-scale fontSize for the video resolution (editor px → video px)
-                        scaled_style = dict(style)
-                        scaled_style["fontSize"] = style.get("fontSize", 28) * scale_factor
-
-                        render_state = {
-                            "content": active_sub["content"],
-                            "subX": pos.get("subX", 50),
-                            "subY": pos.get("subY", 85),
-                            "subWidth": pos.get("subWidth", 70),
-                            "scaleFactor": scale_factor,
-                            "timeOffset": time_offset,
-                            "style": scaled_style
+                    # Build active subtitles payload array
+                    active_payload = []
+                    for sub in active_subs:
+                        # Time offset from start of this subtitle
+                        time_offset = t - sub["start"]
+                        
+                        # Resolved styling with proper fallbacks
+                        sub_font_size = sub.get("fontSize") if sub.get("fontSize") is not None else style.get("fontSize", 28)
+                        scaled_font_size = sub_font_size * scale_factor
+                        
+                        sub_style = {
+                            "fontSize": scaled_font_size,
+                            "fontColor": sub.get("fontColor") or style.get("fontColor", "#ffffff"),
+                            "backgroundColor": sub.get("backgroundColor") or style.get("backgroundColor", "rgba(10, 10, 10, 0.85)"),
+                            "customFont": sub.get("customFont") or style.get("customFont", ""),
+                            "fontOpacity": sub.get("fontOpacity") if sub.get("fontOpacity") is not None else style.get("fontOpacity", 1.0),
+                            "backgroundOpacity": sub.get("backgroundOpacity") if sub.get("backgroundOpacity") is not None else style.get("backgroundOpacity", 0.85),
+                            "animationType": sub.get("animationType") or style.get("animationType", "none"),
+                            "animationSpeed": sub.get("animationSpeed") if sub.get("animationSpeed") is not None else style.get("animationSpeed", 200),
                         }
+                        
+                        sub_x = sub.get("subX") if sub.get("subX") is not None else pos.get("subX", 50)
+                        sub_y = sub.get("subY") if sub.get("subY") is not None else pos.get("subY", 85)
+                        sub_width = sub.get("subWidth") if sub.get("subWidth") is not None else pos.get("subWidth", 70)
+                        
+                        active_payload.append({
+                            "content": sub["content"],
+                            "subX": sub_x,
+                            "subY": sub_y,
+                            "subWidth": sub_width,
+                            "timeOffset": time_offset,
+                            "style": sub_style
+                        })
 
-                        # Inject custom font base64 binary on initial active frame
+                    if sub_ids != prev_sub_id or is_animated:
+                        render_state = {
+                            "subtitles": active_payload,
+                            "scaleFactor": scale_factor
+                        }
+                        
+                        # If a custom font file is loaded, inject it
                         if font_base64 and prev_sub_id is None:
                             render_state["customFontBase64"] = font_base64
-
-                        # Set state in page Svelte component
+                            render_state["customFontName"] = style.get("customFont", "")
+                            
                         page.evaluate("state => window.setRenderState(state)", render_state)
 
                     if is_animated:
                         # For animated subtitles, wait one frame interval to let the animation progress
                         page.wait_for_timeout(frame_interval_ms)
                         active_frame_bytes = page.screenshot(type="png", omit_background=True)
-                    elif sub_id != prev_sub_id or active_frame_bytes is None:
+                    elif sub_ids != prev_sub_id or active_frame_bytes is None:
                         # For static subtitles, only take screenshot on first frame of segment
                         active_frame_bytes = page.screenshot(type="png", omit_background=True)
 
-                    prev_sub_id = sub_id
-
+                    prev_sub_id = sub_ids
                     frame_bytes = active_frame_bytes
 
                 # Write frame to FFmpeg stdin
