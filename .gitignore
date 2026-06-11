@@ -1,13 +1,56 @@
-.DS_Store
+# Node
 node_modules
-/build
-/.svelte-kit
-/package
+
+# SvelteKit
+.svelte-kit
+build
+package
+
+# Environment
 .env
 .env.*
 !.env.example
+
+# Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Python
 backend/venv
-backend/fonts
 backend/__pycache__
+backend/*.pyc
+backend/**/*.pyc
+
+# Fonts generated at runtime
+backend/fonts
+
+# PyInstaller
+backend/dist
+backend/build
+backend/*.spec
+
+# Tauri / Rust
+src-tauri/target
+target
+
+# macOS
+.DS_Store
+
+# Linux
+*.swp
+*.swo
+*~
+
+# VSCode
+.vscode
+
+# JetBrains
+.idea
+
+# Logs
+*.log
+
+# Generated subtitles/videos if applicable
+backend/output
+backend/temp
+backend/tmp
