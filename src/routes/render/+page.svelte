@@ -2,6 +2,7 @@
     import { onMount } from "svelte";
     import GlitchText from "$lib/animations/GlitchText.svelte";
     import SplitText from "$lib/animations/SplitText.svelte";
+    import TypingText from "$lib/animations/TypingText.svelte";
 
     // Subtitle properties
     let content = "";
@@ -157,6 +158,13 @@
                             text={content}
                             duration={animationSpeed / 1000}
                             delay={(animationSpeed / 10) || 10}
+                        />
+                    {:else if animationType === 'typing'}
+                        <TypingText
+                            text={content}
+                            typingSpeed={animationSpeed ?? 50}
+                            loop={false}
+                            showCursor={true}
                         />
                     {:else}
                         {content}

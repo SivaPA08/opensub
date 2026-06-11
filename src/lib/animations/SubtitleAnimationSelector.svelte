@@ -43,6 +43,7 @@
                 <option value="scale-in">Scale In</option>
                 <option value="glitch">Glitch Text</option>
                 <option value="split-text">Split Text</option>
+                <option value="typing">Typing</option>
             </select>
         </div>
     </div>
@@ -58,7 +59,7 @@
                 <input
                     id="animationSpeedInput"
                     type="range"
-                    min="50"
+                    min="0"
                     max="1000"
                     step="10"
                     bind:value={animationSpeed}
@@ -66,7 +67,7 @@
                 />
                 <input
                     type="number"
-                    min="50"
+                    min="0"
                     max="1000"
                     bind:value={animationSpeed}
                     class="speed-number-input"

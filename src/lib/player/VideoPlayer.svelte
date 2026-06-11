@@ -15,6 +15,7 @@
     import { listen } from "@tauri-apps/api/event";
     import GlitchText from "../animations/GlitchText.svelte";
     import SplitText from "../animations/SplitText.svelte";
+    import TypingText from "../animations/TypingText.svelte";
 
     let videoElement: HTMLVideoElement;
     let videoSrc = "";
@@ -560,6 +561,13 @@
                                         text={activeSubtitle.content}
                                         duration={($subtitleAnimation.animationSpeed ?? 200) / 1000}
                                         delay={(($subtitleAnimation.animationSpeed ?? 200) / 10) || 10}
+                                    />
+                                {:else if ($subtitleAnimation.animationType ?? 'none') === 'typing'}
+                                    <TypingText
+                                        text={activeSubtitle.content}
+                                        typingSpeed={$subtitleAnimation.animationSpeed ?? 50}
+                                        loop={false}
+                                        showCursor={true}
                                     />
                                 {:else}
                                     {activeSubtitle.content}

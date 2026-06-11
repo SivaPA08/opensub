@@ -256,8 +256,8 @@ def run():
                     # Active subtitle found
                     sub_id = (active_sub["start"], active_sub["end"], active_sub["content"])
 
-                    if sub_id != prev_sub_id or active_frame_bytes is None or is_animated:
-                        # Subtitle content or segment changed — update state and screenshot
+                    if sub_id != prev_sub_id:
+                        # Subtitle content or segment changed — update state
                         # Pre-scale fontSize for the video resolution (editor px → video px)
                         scaled_style = dict(style)
                         scaled_style["fontSize"] = style.get("fontSize", 28) * scale_factor
@@ -278,13 +278,15 @@ def run():
                         # Set state in page Svelte component
                         page.evaluate("state => window.setRenderState(state)", render_state)
 
-                        # For animated subtitles, wait one frame interval for CSS animation to advance
-                        if is_animated:
-                            page.wait_for_timeout(frame_interval_ms)
-
-                        # Capture transparent PNG subtitle block frame
+                    if is_animated:
+                        # For animated subtitles, wait one frame interval to let the animation progress
+                        page.wait_for_timeout(frame_interval_ms)
                         active_frame_bytes = page.screenshot(type="png", omit_background=True)
-                        prev_sub_id = sub_id
+                    elif sub_id != prev_sub_id or active_frame_bytes is None:
+                        # For static subtitles, only take screenshot on first frame of segment
+                        active_frame_bytes = page.screenshot(type="png", omit_background=True)
+
+                    prev_sub_id = sub_id
 
                     frame_bytes = active_frame_bytes
 
