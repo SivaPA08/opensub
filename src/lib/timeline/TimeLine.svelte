@@ -1,6 +1,6 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { videoDuration, videoCurrentTime, subtitle, selectedSubtitleIndices, updateSubtitleProperties } from "../store.js";
+    import { videoDuration, videoCurrentTime, subtitle, selectedSubtitleIndices, updateSubtitleProperties, pushUndoSnapshot, setSubtitles } from "../store.js";
 
     type Clip = {
         id: number;
@@ -113,7 +113,7 @@
                 content: clip.title
             };
         });
-        subtitle.set(updated);
+        setSubtitles(updated, { recordUndo: false });
         // Sync our serialization key so we avoid triggering the store-to-clips reactive block
         lastSubtitlesKey = updated.map(s => `${s.start}-${s.end}-${s.content}`).join('|');
     }
@@ -171,6 +171,7 @@
 
     function down(e: MouseEvent, clip: Clip): void {
         e.stopPropagation();
+        pushUndoSnapshot(true);
 
         const index = clip.id - 1;
 
@@ -251,6 +252,7 @@
 
     function resizeStart(e: MouseEvent, clip: Clip, side: ResizeSide): void {
         e.stopPropagation();
+        pushUndoSnapshot(true);
 
         const index = clip.id - 1;
         selectedSubtitleIndices.update(existing => {
@@ -481,6 +483,7 @@
         </div>
     </div>
 
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div class="tracks" bind:this={tracksRef} on:mousedown={startBoxSelection}>
         <div class="tracks-inner" style="width: {timelineDuration * zoom + 120}px;">
             <!-- Selection Box Overlay -->

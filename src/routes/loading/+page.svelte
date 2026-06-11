@@ -5,6 +5,7 @@
         subtitle,
         videoPath,
         wordPerFrame,
+        clearUndoHistory,
         type Subtitle,
     } from "$lib/store";
     import { invoke } from "@tauri-apps/api/core";
@@ -33,6 +34,7 @@
                     end: s.end,
                     content: s.text || s.content || "",
                 }));
+                clearUndoHistory();
                 subtitle.set(mapped);
                 console.log("Mapped Subtitles:", mapped);
                 await goto("/editor");

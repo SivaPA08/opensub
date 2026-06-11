@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { subtitleAnimation, selectedSubtitleIndices, subtitle, updateSubtitleProperties, videoCurrentTime } from "../store.js";
+    import { subtitleAnimation, selectedSubtitleIndices, subtitle, updateSubtitleProperties, pushUndoSnapshot, videoCurrentTime } from "../store.js";
     import ColorPicker from "../colorpicker/ColorPicker.svelte";
     import { invoke } from "@tauri-apps/api/core";
 
@@ -70,7 +70,7 @@
                 customFontFile,
                 fontOpacity,
                 backgroundOpacity
-            });
+            }, { recordUndo: false });
         }
     }
 
@@ -124,6 +124,7 @@
     }
 
     async function loadFont(file: File) {
+        pushUndoSnapshot(true);
         try {
             const buffer = await file.arrayBuffer();
             const data = new Uint8Array(buffer);
@@ -166,6 +167,7 @@
     }
 
     function resetFont() {
+        pushUndoSnapshot(true);
         customFont = "";
         customFontFile = "";
         customFontName = "";
@@ -201,6 +203,7 @@
                 max="80" 
                 bind:value={fontSize} 
                 class="premium-slider"
+                onmousedown={() => pushUndoSnapshot(true)}
             />
             <input 
                 type="number" 
@@ -208,6 +211,7 @@
                 max="80" 
                 bind:value={fontSize} 
                 class="size-number-input"
+                onfocus={() => pushUndoSnapshot(true)}
             />
         </div>
     </div>
@@ -247,6 +251,7 @@
                 step="0.05" 
                 bind:value={fontOpacity} 
                 class="premium-slider"
+                onmousedown={() => pushUndoSnapshot(true)}
             />
             <span class="sub-value-badge">{Math.round(fontOpacity * 100)}%</span>
         </div>
@@ -287,6 +292,7 @@
                 step="0.05" 
                 bind:value={backgroundOpacity} 
                 class="premium-slider"
+                onmousedown={() => pushUndoSnapshot(true)}
             />
             <span class="sub-value-badge">{Math.round(backgroundOpacity * 100)}%</span>
         </div>

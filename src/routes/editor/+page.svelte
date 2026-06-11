@@ -1,13 +1,35 @@
 <script lang="ts">
+    import { onMount } from "svelte";
     import { goto } from "$app/navigation";
     import VideoPlayer from "$lib/player/VideoPlayer.svelte";
     import TimeLine from "$lib/timeline/TimeLine.svelte";
     import SubtitleAnimationSelector from "$lib/animations/SubtitleAnimationSelector.svelte";
     import SubtitleAnimationControls from "$lib/animations/SubtitleAnimationControls.svelte";
+    import { undoSubtitleChange } from "$lib/store";
 
     async function home(): Promise<void> {
         await goto("/");
     }
+
+    onMount(() => {
+        function handleKeyDown(e: KeyboardEvent): void {
+            if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
+                const target = e.target as HTMLElement;
+                if (
+                    target.tagName === "INPUT" ||
+                    target.tagName === "TEXTAREA" ||
+                    target.isContentEditable
+                ) {
+                    return;
+                }
+                e.preventDefault();
+                undoSubtitleChange();
+            }
+        }
+
+        window.addEventListener("keydown", handleKeyDown);
+        return () => window.removeEventListener("keydown", handleKeyDown);
+    });
 
     let mainRef: HTMLElement | undefined = undefined;
     let leftWidthPercent: number = 75; // Left panel default width in percent

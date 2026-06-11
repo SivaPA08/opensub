@@ -62,6 +62,18 @@ async fn handle_client(mut socket: tokio::net::TcpStream) {
 
     let request_str = String::from_utf8_lossy(&buf[..n]);
 
+    let request_path = request_str
+        .lines()
+        .next()
+        .and_then(|line| line.split_whitespace().nth(1))
+        .unwrap_or("/");
+
+    if request_path != "/video" {
+        let response = "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n";
+        let _ = socket.write_all(response.as_bytes()).await;
+        return;
+    }
+
     // Parse HTTP Range header if present (standard for video players seeking/streaming)
     let mut range_start = 0;
     let mut range_end = None;

@@ -1,5 +1,5 @@
 <script lang="ts">
-    import { subtitleAnimation, selectedSubtitleIndices, subtitle, updateSubtitleProperties, videoCurrentTime } from "../store.js";
+    import { subtitleAnimation, selectedSubtitleIndices, subtitle, updateSubtitleProperties, pushUndoSnapshot, videoCurrentTime } from "../store.js";
 
     let animationType = "none";
     let animationSpeed = 200;
@@ -35,7 +35,7 @@
             updateSubtitleProperties($selectedSubtitleIndices, {
                 animationType,
                 animationSpeed
-            });
+            }, { recordUndo: false });
         }
     }
 </script>
@@ -57,6 +57,7 @@
                 id="animationTypeSelect"
                 bind:value={animationType}
                 class="premium-select"
+                onmousedown={() => pushUndoSnapshot(true)}
             >
                 <option value="none">None (Static)</option>
                 <option value="pop-up">Pop Up</option>
@@ -85,6 +86,7 @@
                     step="10"
                     bind:value={animationSpeed}
                     class="premium-slider"
+                    onmousedown={() => pushUndoSnapshot(true)}
                 />
                 <input
                     type="number"
@@ -92,6 +94,7 @@
                     max="1000"
                     bind:value={animationSpeed}
                     class="speed-number-input"
+                    onfocus={() => pushUndoSnapshot(true)}
                 />
             </div>
         </div>

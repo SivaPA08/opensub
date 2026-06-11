@@ -1,6 +1,6 @@
 <script lang="ts">
     import { invoke } from "@tauri-apps/api/core";
-    import { subtitle, type Subtitle } from "../store";
+    import { subtitle, clearUndoHistory, type Subtitle } from "../store";
     async function generateSubtitle(videoUrl: string, count: number) {
         const sub = await invoke<any>("run_python", {
             name: videoUrl,
@@ -12,6 +12,7 @@
                 end: s.end,
                 content: s.text || s.content || ""
             }));
+            clearUndoHistory();
             subtitle.set(mapped);
         }
     }

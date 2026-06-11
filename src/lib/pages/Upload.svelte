@@ -1,6 +1,6 @@
 <script lang="ts">
     import { goto } from "$app/navigation";
-    import { videoPath, wordPerFrame, subtitle } from "$lib/store";
+    import { videoPath, wordPerFrame, subtitle, clearUndoHistory } from "$lib/store";
     import { open } from "@tauri-apps/plugin-dialog";
 
     let selectedFilePath = $state<string | null>(null);
@@ -21,6 +21,7 @@
             if (selected && typeof selected === "string") {
                 selectedFilePath = selected;
                 videoPath.set(selected);
+                clearUndoHistory();
                 subtitle.set([]); // Instantly clear previous subtitle array to free memory
             }
         } catch (error) {

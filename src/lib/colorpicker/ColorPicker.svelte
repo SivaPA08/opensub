@@ -1,5 +1,6 @@
 <script lang="ts">
     import { onMount, onDestroy } from "svelte";
+    import { pushUndoSnapshot } from "../store.js";
 
     // ── Props ──────────────────────────────────────────────────────────────────
     export let value: string = "rgba(255, 255, 255, 0.15)";
@@ -256,14 +257,17 @@
     <!-- Gradient + Side sliders row -->
     <div class="cp-body">
         <!-- Gradient panel -->
+        <!-- svelte-ignore a11y_no_static_element_interactions -->
         <div
             class="cp-gradient-wrap"
             bind:this={gradientEl}
             on:mousedown={(e) => {
+                pushUndoSnapshot(true);
                 dragging = "gradient";
                 handleGradientInteraction(e);
             }}
             on:touchstart|preventDefault={(e) => {
+                pushUndoSnapshot(true);
                 dragging = "gradient";
                 handleGradientInteraction(e);
             }}
@@ -284,14 +288,17 @@
         <!-- Right column: Hue + Alpha sliders -->
         <div class="cp-sliders">
             <!-- Hue slider -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
                 class="cp-hue-wrap"
                 bind:this={hueEl}
                 on:mousedown={(e) => {
+                    pushUndoSnapshot(true);
                     dragging = "hue";
                     handleHueInteraction(e);
                 }}
                 on:touchstart|preventDefault={(e) => {
+                    pushUndoSnapshot(true);
                     dragging = "hue";
                     handleHueInteraction(e);
                 }}
@@ -306,14 +313,17 @@
             </div>
 
             <!-- Alpha slider (vertical) -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
             <div
                 class="cp-alpha-wrap"
                 bind:this={alphaEl}
                 on:mousedown={(e) => {
+                    pushUndoSnapshot(true);
                     dragging = "alpha";
                     handleAlphaInteraction(e);
                 }}
                 on:touchstart|preventDefault={(e) => {
+                    pushUndoSnapshot(true);
                     dragging = "alpha";
                     handleAlphaInteraction(e);
                 }}

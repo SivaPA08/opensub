@@ -9,6 +9,8 @@
         subtitleAnimation,
         selectedSubtitleIndices,
         updateSubtitleProperties,
+        pushUndoSnapshot,
+        updateSubtitles,
         type Subtitle,
     } from "../store.js";
     import { invoke } from "@tauri-apps/api/core";
@@ -103,7 +105,7 @@
         if (y !== undefined) updates.subY = y;
         if (width !== undefined) updates.subWidth = width;
 
-        updateSubtitleProperties(indicesToUpdate, updates);
+        updateSubtitleProperties(indicesToUpdate, updates, { recordUndo: false });
     }
 
     let isDraggingSubtitle = false;
@@ -131,6 +133,7 @@
 
         e.preventDefault();
         e.stopPropagation();
+        pushUndoSnapshot(true);
         isDraggingSubtitle = true;
         dragStartX = e.clientX;
         dragStartY = e.clientY;
@@ -170,6 +173,7 @@
     function startSubtitleResize(e: MouseEvent) {
         e.preventDefault();
         e.stopPropagation();
+        pushUndoSnapshot(true);
         isResizingSubtitle = true;
         resizeStartX = e.clientX;
         initialSubWidth = subWidth;
@@ -208,12 +212,14 @@
             content: "New Subtitle segment",
         };
 
-        subtitle.update((items) => {
+        pushUndoSnapshot(true);
+        updateSubtitles((items) => {
             const updated = [...items, newSub];
             return updated.sort((a, b) => a.start - b.start);
-        });
+        }, { recordUndo: false });
 
         // Instantly focus and open editing interface
+        textEditUndoRecorded = false;
         isEditingText = true;
     }
 
@@ -244,15 +250,21 @@
         }
     }
 
+    let textEditUndoRecorded = false;
+
     function updateSubtitleText(sub: Subtitle, newText: string) {
-        subtitle.update((items) => {
+        if (!textEditUndoRecorded) {
+            pushUndoSnapshot(true);
+            textEditUndoRecorded = true;
+        }
+        updateSubtitles((items) => {
             return items.map((item) => {
                 if (item.start === sub.start && item.end === sub.end) {
                     return { ...item, content: newText };
                 }
                 return item;
             });
-        });
+        }, { recordUndo: false });
     }
 
     function hexOrRgbToRgba(color: string, opacity: number): string {
@@ -603,7 +615,10 @@
                                         activeSubtitle,
                                         e.currentTarget.value,
                                     )}
-                                on:blur={() => (isEditingText = false)}
+                                on:blur={() => {
+                                    isEditingText = false;
+                                    textEditUndoRecorded = false;
+                                }}
                                 on:click|stopPropagation
                                 on:keydown={(e) => {
                                     if (e.key === "Enter" && !e.shiftKey) {
@@ -622,7 +637,10 @@
                                     activeFontColor,
                                     activeFontOpacity,
                                 )}; font-family: {activeCustomFont};"
-                                on:dblclick={() => (isEditingText = true)}
+                                on:dblclick={() => {
+                                    textEditUndoRecorded = false;
+                                    isEditingText = true;
+                                }}
                             >
                                 {#if activeAnimationType === 'glitch'}
                                     <GlitchText
