@@ -345,8 +345,8 @@
 
         try {
             const config = {
-                input_path: $videoPath,
-                output_path: outputPath,
+                inputPath: $videoPath,
+                outputPath: outputPath,
                 subtitles: $subtitle.map((s) => ({
                     start: s.start,
                     end: s.end,
@@ -379,13 +379,11 @@
                     subY: subY,
                     subWidth: subWidth,
                 },
-                video_info: {
-                    width: videoWidth,
-                    height: videoHeight,
-                    container_width: containerRef
+                videoInfo: {
+                    containerWidth: containerRef
                         ? containerRef.clientWidth
                         : videoWidth,
-                    container_height: containerRef
+                    containerHeight: containerRef
                         ? containerRef.clientHeight
                         : videoHeight,
                 },
