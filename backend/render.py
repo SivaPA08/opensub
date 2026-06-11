@@ -256,8 +256,10 @@ def run():
                     # Active subtitle found
                     sub_id = (active_sub["start"], active_sub["end"], active_sub["content"])
 
-                    if sub_id != prev_sub_id:
-                        # Subtitle content or segment changed — update state
+                    # Calculate current frame's time offset from the start of the subtitle
+                    time_offset = t - active_sub["start"]
+
+                    if sub_id != prev_sub_id or is_animated:
                         # Pre-scale fontSize for the video resolution (editor px → video px)
                         scaled_style = dict(style)
                         scaled_style["fontSize"] = style.get("fontSize", 28) * scale_factor
@@ -268,6 +270,7 @@ def run():
                             "subY": pos.get("subY", 85),
                             "subWidth": pos.get("subWidth", 70),
                             "scaleFactor": scale_factor,
+                            "timeOffset": time_offset,
                             "style": scaled_style
                         }
 

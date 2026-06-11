@@ -19,6 +19,7 @@
         "center";
     export let tag: keyof HTMLElementTagNameMap = "p";
     export let onLetterAnimationComplete: (() => void) | undefined = undefined;
+    export let timeOffset: number | undefined = undefined;
 
     let ref: HTMLElement | null = null;
     let fontsLoaded = false;
@@ -134,12 +135,21 @@
                 stagger: delay / 1000,
                 force3D: true,
                 willChange: "transform, opacity",
+                paused: timeOffset !== undefined,
                 onComplete: () => {
                     animationCompleted = true;
                     onLetterAnimationComplete?.();
                 },
             },
         );
+
+        if (timeOffset !== undefined) {
+            timeline.seek(timeOffset);
+        }
+    }
+
+    $: if (timeOffset !== undefined && timeline) {
+        timeline.seek(timeOffset);
     }
 
     function refresh() {

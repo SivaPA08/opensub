@@ -20,6 +20,7 @@
     export let onSentenceComplete: ((sentence: string, index: number) => void) | undefined = undefined;
     export let startOnVisible: boolean = false;
     export let reverseMode: boolean = false;
+    export let timeOffset: number | undefined = undefined;
 
     let displayedText: string = "";
     let currentCharIndex: number = 0;
@@ -51,13 +52,28 @@
         hideCursorWhileTyping &&
         (isDeleting || currentCharIndex < processedText.length);
 
-    // Reactively watch for text or speed changes to restart typing animation
+    // Reactively watch for text or speed changes to restart typing animation (only in real-time mode)
     $: {
         const _deps = [text, typingSpeed, loop];
         if (!initialRender) {
-            restartAnimation();
+            if (timeOffset === undefined) {
+                restartAnimation();
+            }
         } else {
             initialRender = false;
+        }
+    }
+
+    // Frame-accurate rendering mode driven by external clock
+    $: if (timeOffset !== undefined) {
+        const speedInSeconds = typingSpeed / 1000;
+        if (speedInSeconds <= 0) {
+            displayedText = currentText;
+            currentCharIndex = currentText.length;
+        } else {
+            const count = Math.floor(timeOffset / speedInSeconds);
+            currentCharIndex = Math.min(count, currentText.length);
+            displayedText = currentText.slice(0, currentCharIndex);
         }
     }
 
@@ -194,7 +210,9 @@
             });
         }
 
-        runAnimation();
+        if (timeOffset === undefined) {
+            runAnimation();
+        }
 
         return () => {
             cancelled = true;

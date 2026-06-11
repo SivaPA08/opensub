@@ -23,6 +23,9 @@
     // Scaling factor (editor px -> video px)
     let scaleFactor = 1.0;
 
+    // Time offset (for frame-accurate animation rendering)
+    let timeOffset = 0.0;
+
     // Helper to convert hex or rgb to rgba with a specific opacity
     function hexOrRgbToRgba(color: string, opacity: number): string {
         if (!color) return `rgba(0,0,0,${opacity})`;
@@ -59,6 +62,7 @@
             subY?: number;
             subWidth?: number;
             scaleFactor?: number;
+            timeOffset?: number;
             style?: {
                 fontSize?: number;
                 fontColor?: string;
@@ -76,6 +80,7 @@
             if (state.subY !== undefined) subY = state.subY;
             if (state.subWidth !== undefined) subWidth = state.subWidth;
             if (state.scaleFactor !== undefined) scaleFactor = state.scaleFactor;
+            if (state.timeOffset !== undefined) timeOffset = state.timeOffset;
 
             if (state.style) {
                 const s = state.style;
@@ -158,11 +163,13 @@
                             text={content}
                             duration={animationSpeed / 1000}
                             delay={(animationSpeed / 10) || 10}
+                            timeOffset={timeOffset}
                         />
                     {:else if animationType === 'typing'}
                         <TypingText
                             text={content}
                             typingSpeed={animationSpeed ?? 50}
+                            timeOffset={timeOffset}
                             loop={false}
                             showCursor={true}
                         />
