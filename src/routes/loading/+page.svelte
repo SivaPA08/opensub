@@ -85,7 +85,7 @@
                     cx="50"
                     cy="50"
                     r="42"
-                    style="stroke-dashoffset: {264 - (264 * progress) / 100}"
+                    stroke-dashoffset={264 - (264 * progress) / 100}
                 />
             </svg>
             <span class="progress-number"

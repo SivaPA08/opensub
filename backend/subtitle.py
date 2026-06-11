@@ -1,9 +1,19 @@
 import sys
 import subprocess
 import json
+
+# Immediately signal that the process has started and libraries are loading
+print("PROGRESS:5.0", file=sys.stderr, flush=True)
+
 from faster_whisper import WhisperModel
 
+# Signal that the model initialization has begun
+print("PROGRESS:15.0", file=sys.stderr, flush=True)
+
 model = WhisperModel("small", compute_type="float32")
+
+# Signal that the model is loaded and ready for transcription
+print("PROGRESS:40.0", file=sys.stderr, flush=True)
 
 
 def get_audio_duration(filepath: str) -> float:
@@ -27,20 +37,22 @@ def getvideo(filename: str, max_words: int):
     if filename==None or max_words==None:
         raise Exception("Filename and max_words are required")
 
-    duration = get_audio_duration(filename)
-
     segments, info = model.transcribe(
         filename,
         word_timestamps=True
     )
 
+    # Use transcription info duration if available, fallback to ffprobe
+    duration = info.duration if (info and hasattr(info, 'duration') and info.duration) else get_audio_duration(filename)
+
     words = []
 
     for segment in segments:
-        # Report progress based on segment end time vs total duration
+        # Report progress based on segment end time vs total duration scaled from 40% to 95%
         if duration > 0:
             pct = min((segment.end / duration) * 100, 99.0)
-            print(f"PROGRESS:{pct:.1f}", file=sys.stderr, flush=True)
+            scaled_pct = 40.0 + (pct * 0.55)
+            print(f"PROGRESS:{scaled_pct:.1f}", file=sys.stderr, flush=True)
 
         for word in segment.words:
             words.append({

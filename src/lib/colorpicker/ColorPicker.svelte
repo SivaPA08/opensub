@@ -277,12 +277,12 @@
                 class="cp-canvas"
                 width="340"
                 height="200"
-            />
+            ></canvas>
             <!-- Thumb -->
             <div
                 class="cp-thumb"
                 style="left:{gradientThumbX}%; top:{gradientThumbY}%;"
-            />
+            ></div>
         </div>
 
         <!-- Right column: Hue + Alpha sliders -->
@@ -308,8 +308,8 @@
                     class="cp-canvas"
                     width="22"
                     height="200"
-                />
-                <div class="cp-slider-thumb" style="top:{hueThumbY}%;" />
+                ></canvas>
+                <div class="cp-slider-thumb" style="top:{hueThumbY}%;"></div>
             </div>
 
             <!-- Alpha slider (vertical) -->
@@ -333,11 +333,11 @@
                     class="cp-canvas cp-alpha-canvas"
                     width="22"
                     height="200"
-                />
+                ></canvas>
                 <div
                     class="cp-slider-thumb"
                     style="top:{(1 - alpha) * 100}%;"
-                />
+                ></div>
             </div>
         </div>
     </div>
