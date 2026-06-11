@@ -16,6 +16,7 @@
     import GlitchText from "../animations/GlitchText.svelte";
     import SplitText from "../animations/SplitText.svelte";
     import TypingText from "../animations/TypingText.svelte";
+    import DecriptText from "../animations/DecriptText.svelte";
 
     let videoElement: HTMLVideoElement;
     let videoSrc = "";
@@ -568,6 +569,13 @@
                                         typingSpeed={$subtitleAnimation.animationSpeed ?? 50}
                                         loop={false}
                                         showCursor={true}
+                                    />
+                                {:else if ($subtitleAnimation.animationType ?? 'none') === 'decrypt'}
+                                    <DecriptText
+                                        text={activeSubtitle.content}
+                                        speed={$subtitleAnimation.animationSpeed ?? 50}
+                                        animateOn="view"
+                                        sequential={true}
                                     />
                                 {:else}
                                     {activeSubtitle.content}

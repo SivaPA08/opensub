@@ -44,6 +44,7 @@
                 <option value="glitch">Glitch Text</option>
                 <option value="split-text">Split Text</option>
                 <option value="typing">Typing</option>
+                <option value="decrypt">Decrypt Text</option>
             </select>
         </div>
     </div>

@@ -3,6 +3,7 @@
     import GlitchText from "$lib/animations/GlitchText.svelte";
     import SplitText from "$lib/animations/SplitText.svelte";
     import TypingText from "$lib/animations/TypingText.svelte";
+    import DecriptText from "$lib/animations/DecriptText.svelte";
 
     // Subtitle properties
     let content = "";
@@ -172,6 +173,14 @@
                             timeOffset={timeOffset}
                             loop={false}
                             showCursor={true}
+                        />
+                    {:else if animationType === 'decrypt'}
+                        <DecriptText
+                            text={content}
+                            speed={animationSpeed ?? 50}
+                            timeOffset={timeOffset}
+                            animateOn="view"
+                            sequential={true}
                         />
                     {:else}
                         {content}
