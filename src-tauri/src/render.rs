@@ -307,6 +307,23 @@ fn render_video(app: &AppHandle, config: RenderConfig) -> Result<PyResponse, Str
     tab.set_transparent_background_color()
         .map_err(|e| format!("failed to set transparent background color: {}", e))?;
 
+    tab.call_method(headless_chrome::protocol::cdp::Emulation::SetDeviceMetricsOverride {
+        width,
+        height,
+        device_scale_factor: 1.0,
+        mobile: false,
+        scale: None,
+        screen_width: None,
+        screen_height: None,
+        position_x: None,
+        position_y: None,
+        dont_set_visible_size: None,
+        screen_orientation: None,
+        viewport: None,
+        display_feature: None,
+        device_posture: None,
+    }).map_err(|e| format!("failed to set device metrics: {}", e))?;
+
     tab.navigate_to(&render_url)
         .map_err(|e| format!("failed to navigate to render page: {}", e))?;
     tab.wait_until_navigated()
