@@ -1,10 +1,54 @@
 <script lang="ts">
     import { goto } from "$app/navigation";
-    import { videoPath, wordPerFrame, subtitle, clearUndoHistory } from "$lib/store";
+    import { videoPath, wordPerFrame, subtitle, clearUndoHistory, selectedModel } from "$lib/store";
     import { open } from "@tauri-apps/plugin-dialog";
+    import { onMount, onDestroy } from "svelte";
+    import { listen } from "@tauri-apps/api/event";
+    import { invoke } from "@tauri-apps/api/core";
+    import { get } from "svelte/store";
 
     let selectedFilePath = $state<string | null>(null);
     let localWordPerFrame = $state<number>(3);
+    let currentModel = $state<string>(get(selectedModel));
+
+    let downloadProgress = $state<Record<string, number>>({});
+    let modelStatuses = $state<Record<string, boolean>>({});
+    let isDownloading = $state<Record<string, boolean>>({});
+    let unlistenProgress: (() => void) | null = null;
+
+    const models = [
+        { id: "tiny", name: "Tiny", size: "~75 MB", speed: "Very Fast", accuracy: "Lowest" },
+        { id: "base", name: "Base", size: "~150 MB", speed: "Fast", accuracy: "Good" },
+        { id: "small", name: "Small", size: "~488 MB", speed: "Medium", accuracy: "Better" },
+        { id: "medium", name: "Medium", size: "~1.5 GB", speed: "Slow", accuracy: "High" },
+    ];
+
+    $effect(() => {
+        selectedModel.set(currentModel);
+    });
+
+    async function checkStatuses() {
+        try {
+            const status = await invoke<Record<string, boolean>>("check_models_status");
+            modelStatuses = status;
+        } catch (err) {
+            console.error("Failed to check model statuses:", err);
+        }
+    }
+
+    async function downloadModel(modelId: string) {
+        if (isDownloading[modelId] || modelStatuses[modelId]) return;
+        isDownloading[modelId] = true;
+        downloadProgress[modelId] = 0;
+        try {
+            await invoke("download_model", { modelName: modelId });
+            modelStatuses[modelId] = true;
+        } catch (err) {
+            alert(`Failed to download model ${modelId}: ${err}`);
+        } finally {
+            isDownloading[modelId] = false;
+        }
+    }
 
     async function handleFileSelect() {
         try {
@@ -38,6 +82,27 @@
         wordPerFrame.set(localWordPerFrame);
         await goto("/loading");
     }
+
+    onMount(async () => {
+        await checkStatuses();
+        unlistenProgress = await listen<{ model: string; progress: number }>(
+            "model-download-progress",
+            (event) => {
+                const { model, progress } = event.payload;
+                downloadProgress[model] = Math.round(progress);
+                if (progress >= 100) {
+                    isDownloading[model] = false;
+                    modelStatuses[model] = true;
+                }
+            }
+        );
+    });
+
+    onDestroy(() => {
+        if (unlistenProgress) {
+            unlistenProgress();
+        }
+    });
 </script>
 
 <main class="container">
@@ -92,11 +157,84 @@
             <p class="helper-text">How many words appear on screen at once.</p>
         </div>
 
+        <div class="form-group">
+            <span class="input-label">Whisper Model</span>
+            <div class="model-table-container">
+                <table class="model-table">
+                    <thead>
+                        <tr>
+                            <th>Select</th>
+                            <th>Model</th>
+                            <th>Size</th>
+                            <th>Speed</th>
+                            <th>Accuracy</th>
+                            <th>Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {#each models as model}
+                            <!-- svelte-ignore a11y_click_events_have_key_events -->
+                            <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
+                            <tr
+                                class="model-row"
+                                class:active={currentModel === model.id}
+                                onclick={() => {
+                                    if (!isDownloading[model.id]) {
+                                        currentModel = model.id;
+                                    }
+                                }}
+                            >
+                                <td class="td-radio">
+                                    <input
+                                        type="radio"
+                                        name="model-select"
+                                        value={model.id}
+                                        bind:group={currentModel}
+                                        disabled={isDownloading[model.id]}
+                                        onclick={(e) => e.stopPropagation()}
+                                    />
+                                </td>
+                                <td class="td-name">{model.name}</td>
+                                <td class="td-meta">{model.size}</td>
+                                <td class="td-meta">{model.speed}</td>
+                                <td class="td-meta">{model.accuracy}</td>
+                                <td class="td-action" onclick={(e) => e.stopPropagation()}>
+                                    {#if modelStatuses[model.id]}
+                                        <span class="badge badge-success">Downloaded</span>
+                                    {:else if isDownloading[model.id]}
+                                        <div class="download-progress-container">
+                                            <div class="progress-bar">
+                                                <div class="progress-fill" style="width: {downloadProgress[model.id] || 0}%"></div>
+                                            </div>
+                                            <span class="progress-pct">{downloadProgress[model.id] || 0}%</span>
+                                        </div>
+                                    {:else}
+                                        <button
+                                            type="button"
+                                            class="btn-download"
+                                            onclick={() => downloadModel(model.id)}
+                                        >
+                                            Download
+                                        </button>
+                                    {/if}
+                                </td>
+                            </tr>
+                        {/each}
+                    </tbody>
+                </table>
+            </div>
+            {#if !modelStatuses[currentModel] && !isDownloading[currentModel]}
+                <p class="helper-text warning-text">⚠️ Please download the selected model to generate subtitles.</p>
+            {:else if isDownloading[currentModel]}
+                <p class="helper-text info-text">⏳ Downloading model, please wait...</p>
+            {/if}
+        </div>
+
         <button
             type="button"
             class="btn-generate"
             onclick={generate}
-            disabled={!selectedFilePath || localWordPerFrame <= 0}
+            disabled={!selectedFilePath || localWordPerFrame <= 0 || !modelStatuses[currentModel] || isDownloading[currentModel]}
         >
             <span>Generate Subtitles</span>
             <span class="arrow">→</span>
@@ -132,7 +270,7 @@
         border: 1px solid #2a2a2a;
         border-radius: 16px;
         width: 100%;
-        max-width: 440px;
+        max-width: 520px;
         padding: 2rem;
     }
 
@@ -432,5 +570,141 @@
         .file-info {
             max-width: 100%;
         }
+    }
+    /* ── Model Table ── */
+    .model-table-container {
+        margin-top: 0.5rem;
+        background: #161616;
+        border: 1px solid #222222;
+        border-radius: 8px;
+        overflow-x: auto;
+    }
+
+    .model-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.8rem;
+        text-align: left;
+        min-width: 440px;
+    }
+
+    .model-table th {
+        background: #1d1d1d;
+        color: #888888;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.65rem;
+        letter-spacing: 0.08em;
+        padding: 0.6rem 0.8rem;
+        border-bottom: 1px solid #222222;
+    }
+
+    .model-row {
+        cursor: pointer;
+        transition: background 150ms ease;
+        border-bottom: 1px solid #1a1a1a;
+    }
+
+    .model-row:last-child {
+        border-bottom: none;
+    }
+
+    .model-row:hover {
+        background: #1d1d1d;
+    }
+
+    .model-row.active {
+        background: #202020;
+    }
+
+    .model-table td {
+        padding: 0.7rem 0.8rem;
+        vertical-align: middle;
+    }
+
+    .td-radio {
+        width: 30px;
+    }
+
+    .td-name {
+        font-weight: 600;
+        color: #ffffff;
+    }
+
+    .td-meta {
+        color: #aaaaaa;
+    }
+
+    .td-action {
+        text-align: right;
+    }
+
+    .badge {
+        display: inline-block;
+        padding: 0.2rem 0.5rem;
+        border-radius: 4px;
+        font-size: 0.7rem;
+        font-weight: 600;
+    }
+
+    .badge-success {
+        background: rgba(46, 213, 115, 0.15);
+        color: #2ed573;
+        border: 1px solid rgba(46, 213, 115, 0.3);
+    }
+
+    .btn-download {
+        background: #ffffff;
+        color: #000000;
+        border: none;
+        border-radius: 4px;
+        padding: 0.25rem 0.6rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        cursor: pointer;
+        transition: background 120ms ease;
+        font-family: inherit;
+    }
+
+    .btn-download:hover {
+        background: #e8e8e8;
+    }
+
+    .download-progress-container {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        width: 100px;
+    }
+
+    .progress-bar {
+        flex: 1;
+        height: 6px;
+        background: #222222;
+        border-radius: 3px;
+        overflow: hidden;
+    }
+
+    .progress-fill {
+        height: 100%;
+        background: #ffffff;
+        transition: width 150ms ease;
+    }
+
+    .progress-pct {
+        font-size: 0.7rem;
+        color: #ffffff;
+        font-weight: 600;
+        min-width: 28px;
+    }
+
+    .warning-text {
+        color: #ffa502;
+        margin-top: 0.5rem;
+    }
+
+    .info-text {
+        color: #70a1ff;
+        margin-top: 0.5rem;
     }
 </style>

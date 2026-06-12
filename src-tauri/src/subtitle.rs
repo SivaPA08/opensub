@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{Read, Write};
-use std::path::Path;
+
 use std::process::Command;
 use tauri::{AppHandle, Emitter, Manager};
 use whisper_rs::{
@@ -27,6 +27,12 @@ struct WordStamp {
     word: String,
     start: f32,
     end: f32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DownloadProgressPayload {
+    pub model: String,
+    pub progress: f64,
 }
 
 fn ffprobe_duration(filepath: &str) -> Result<f32, String> {
@@ -58,7 +64,22 @@ fn ffprobe_duration(filepath: &str) -> Result<f32, String> {
     Ok(duration)
 }
 
-fn ensure_model(app: &AppHandle, model_path: &Path) -> Result<(), String> {
+fn download_model_file(app: &AppHandle, model_name: &str) -> Result<(), String> {
+    let app_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("failed to get app data dir: {}", e))?;
+
+    let filename = match model_name {
+        "tiny" => "ggml-tiny.bin",
+        "base" => "ggml-base.bin",
+        "small" => "ggml-small.bin",
+        "medium" => "ggml-medium.bin",
+        _ => return Err(format!("Unsupported model: {}", model_name)),
+    };
+
+    let model_path = app_dir.join("models").join(filename);
+
     if model_path.exists() {
         return Ok(());
     }
@@ -67,10 +88,10 @@ fn ensure_model(app: &AppHandle, model_path: &Path) -> Result<(), String> {
         fs::create_dir_all(parent).map_err(|e| format!("failed to create model dir: {}", e))?;
     }
 
-    let url = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin";
+    let url = format!("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{}", filename);
     let tmp_path = model_path.with_extension("bin.part");
 
-    let mut resp = reqwest::blocking::get(url)
+    let mut resp = reqwest::blocking::get(&url)
         .map_err(|e| format!("failed to start model download: {}", e))?;
 
     if !resp.status().is_success() {
@@ -102,8 +123,13 @@ fn ensure_model(app: &AppHandle, model_path: &Path) -> Result<(), String> {
         downloaded += n as u64;
 
         if total > 0 {
-            let pct = 15.0 + ((downloaded as f64 / total as f64) * 25.0);
-            let _ = app.emit("subtitle-progress", pct.min(39.9));
+            let pct = (downloaded as f64 / total as f64) * 100.0;
+            let _ = app.emit("model-download-progress", DownloadProgressPayload {
+                model: model_name.to_string(),
+                progress: pct,
+            });
+            let subtitle_pct = 15.0 + (pct * 0.25);
+            let _ = app.emit("subtitle-progress", subtitle_pct.min(39.9));
         }
     }
 
@@ -115,7 +141,12 @@ fn ensure_model(app: &AppHandle, model_path: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn transcribe_words(app: &AppHandle, filename: &str, max_words: usize) -> Result<Vec<Sub>, String> {
+fn transcribe_words(
+    app: &AppHandle,
+    filename: &str,
+    max_words: usize,
+    model_name: &str,
+) -> Result<Vec<Sub>, String> {
     let max_words = max_words.max(1);
 
     let duration = ffprobe_duration(filename).unwrap_or(0.0);
@@ -125,13 +156,20 @@ fn transcribe_words(app: &AppHandle, filename: &str, max_words: usize) -> Result
         .app_data_dir()
         .map_err(|e| format!("failed to get app data dir: {}", e))?;
 
-    let model_path = app_dir.join("models").join("ggml-small.bin");
+    let model_filename = match model_name {
+        "tiny" => "ggml-tiny.bin",
+        "base" => "ggml-base.bin",
+        "small" => "ggml-small.bin",
+        "medium" => "ggml-medium.bin",
+        _ => return Err(format!("Unsupported model: {}", model_name)),
+    };
+    let model_path = app_dir.join("models").join(model_filename);
 
     let _ = app.emit("subtitle-progress", 5.0);
     let _ = app.emit("subtitle-progress", 15.0);
 
     if !model_path.exists() {
-        ensure_model(app, &model_path)?;
+        download_model_file(app, model_name)?;
     }
 
     let _ = app.emit("subtitle-progress", 40.0);
@@ -302,6 +340,7 @@ pub async fn getvideo(
     app: AppHandle,
     filename: String,
     max_words: usize,
+    model_name: String,
 ) -> Result<PyResponse, String> {
     tauri::async_runtime::spawn_blocking(move || {
         if filename.is_empty() {
@@ -311,13 +350,47 @@ pub async fn getvideo(
             return Err("max_words is required".to_string());
         }
 
-        let subs = transcribe_words(&app, &filename, max_words)?;
+        let subs = transcribe_words(&app, &filename, max_words, &model_name)?;
         let message = serde_json::to_value(subs).map_err(|e| e.to_string())?;
 
         Ok(PyResponse {
             status: "ok".to_string(),
             message,
         })
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub fn check_models_status(app: AppHandle) -> Result<serde_json::Value, String> {
+    let app_dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("failed to get app data dir: {}", e))?;
+
+    let models_dir = app_dir.join("models");
+    let mut status = serde_json::Map::new();
+
+    for model in &["tiny", "base", "small", "medium"] {
+        let filename = match *model {
+            "tiny" => "ggml-tiny.bin",
+            "base" => "ggml-base.bin",
+            "small" => "ggml-small.bin",
+            "medium" => "ggml-medium.bin",
+            _ => continue,
+        };
+        let path = models_dir.join(filename);
+        status.insert(model.to_string(), serde_json::Value::Bool(path.exists()));
+    }
+
+    Ok(serde_json::Value::Object(status))
+}
+
+#[tauri::command]
+pub async fn download_model(app: AppHandle, model_name: String) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        download_model_file(&app, &model_name)
     })
     .await
     .map_err(|e| e.to_string())?

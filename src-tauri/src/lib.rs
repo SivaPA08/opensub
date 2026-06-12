@@ -231,6 +231,8 @@ pub fn run() {
             greet,
             render::run_render,
             subtitle::getvideo,
+            subtitle::check_models_status,
+            subtitle::download_model,
             save_font,
             get_streaming_url
         ])

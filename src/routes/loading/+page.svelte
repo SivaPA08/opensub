@@ -6,6 +6,7 @@
         videoPath,
         wordPerFrame,
         clearUndoHistory,
+        selectedModel,
         type Subtitle,
     } from "$lib/store";
     import { invoke } from "@tauri-apps/api/core";
@@ -21,11 +22,12 @@
     let statusText = $state<string>("Initializing model...");
     let unlisten: (() => void) | null = null;
 
-    async function generateSubtitle(videoUrl: string, count: number) {
+    async function generateSubtitle(videoUrl: string, count: number, model: string) {
         try {
             const sub = await invoke<Pyres>("getvideo", {
                 filename: videoUrl,
                 maxWords: count,
+                modelName: model,
             });
             if (sub.status === "ok") {
                 const rawSubs = sub.message as any[];
@@ -63,11 +65,12 @@
 
         const video = get(videoPath);
         const count = get(wordPerFrame);
+        const model = get(selectedModel);
         if (!video) {
             goto("/");
             return;
         }
-        setTimeout(() => generateSubtitle(video, count), 400);
+        setTimeout(() => generateSubtitle(video, count, model), 400);
     });
 
     onDestroy(() => {
