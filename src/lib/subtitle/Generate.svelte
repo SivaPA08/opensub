@@ -2,9 +2,9 @@
     import { invoke } from "@tauri-apps/api/core";
     import { subtitle, clearUndoHistory, type Subtitle } from "../store";
     async function generateSubtitle(videoUrl: string, count: number) {
-        const sub = await invoke<any>("run_python", {
-            name: videoUrl,
-            count: count,
+        const sub = await invoke<any>("getvideo", {
+            filename: videoUrl,
+            maxWords: count,
         });
         if (sub && sub.status === "ok" && Array.isArray(sub.message)) {
             const mapped = sub.message.map((s: any) => ({

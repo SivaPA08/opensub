@@ -1,20 +1,11 @@
-use serde::{Deserialize, Serialize};
-use std::io::{BufRead, BufReader};
 use std::path::PathBuf;
-use std::process::{Command, Stdio};
 use std::sync::Mutex;
-use tauri::{AppHandle, Emitter};
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tokio::net::TcpListener;
 
 mod render;
-
-#[derive(Serialize, Deserialize)]
-struct PyResponse {
-    status: String,
-    message: serde_json::Value,
-}
+mod subtitle;
 
 static CURRENT_VIDEO_PATH: std::sync::OnceLock<Mutex<Option<String>>> = std::sync::OnceLock::new();
 static SERVER_PORT: std::sync::OnceLock<u16> = std::sync::OnceLock::new();
@@ -193,53 +184,6 @@ async fn handle_client(mut socket: tokio::net::TcpStream) {
     }
 }
 
-#[tauri::command]
-async fn run_python(app: AppHandle, name: String, count: i32) -> Result<PyResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let mut child = Command::new("python3.12")
-            .arg("../backend/main.py")
-            .arg(&name)
-            .arg(count.to_string())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped())
-            .spawn()
-            .map_err(|e| e.to_string())?;
-
-        // Read stderr in a thread to capture PROGRESS lines
-        let stderr = child.stderr.take().ok_or("Failed to capture stderr")?;
-        let app_clone = app.clone();
-        let stderr_handle = std::thread::spawn(move || {
-            let reader = BufReader::new(stderr);
-            for line in reader.lines() {
-                if let Ok(line) = line {
-                    if let Some(pct_str) = line.strip_prefix("PROGRESS:") {
-                        if let Ok(pct) = pct_str.trim().parse::<f64>() {
-                            let _ = app_clone.emit("subtitle-progress", pct);
-                        }
-                    }
-                }
-            }
-        });
-
-        let stdout = child.stdout.take().ok_or("Failed to capture stdout")?;
-        let stdout_reader = BufReader::new(stdout);
-        let mut stdout_text = String::new();
-        for line in stdout_reader.lines() {
-            if let Ok(l) = line {
-                stdout_text.push_str(&l);
-                stdout_text.push('\n');
-            }
-        }
-
-        let _ = child.wait();
-        let _ = stderr_handle.join();
-
-        let res: PyResponse = serde_json::from_str(&stdout_text).map_err(|e| e.to_string())?;
-        Ok(res)
-    })
-    .await
-    .map_err(|e| e.to_string())?
-}
 
 #[tauri::command]
 fn save_font(name: String, data: Vec<u8>) -> Result<String, String> {
@@ -285,8 +229,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .invoke_handler(tauri::generate_handler![
             greet,
-            run_python,
             render::run_render,
+            subtitle::getvideo,
             save_font,
             get_streaming_url
         ])

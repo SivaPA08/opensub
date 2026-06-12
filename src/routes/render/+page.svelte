@@ -29,22 +29,25 @@
     // Helper to convert hex or rgb to rgba with a specific opacity
     function hexOrRgbToRgba(color: string, opacity: number): string {
         if (!color) return `rgba(0,0,0,${opacity})`;
-        
+
         // If it's already rgba, replace the alpha
-        if (color.startsWith('rgba')) {
+        if (color.startsWith("rgba")) {
             return color.replace(/[\d\.]+\)$/, `${opacity})`);
         }
-        
+
         // If it's rgb, convert to rgba
-        if (color.startsWith('rgb')) {
-            return color.replace('rgb', 'rgba').replace(')', `, ${opacity})`);
+        if (color.startsWith("rgb")) {
+            return color.replace("rgb", "rgba").replace(")", `, ${opacity})`);
         }
-        
+
         // If it's hex (#fff or #ffffff)
-        if (color.startsWith('#')) {
+        if (color.startsWith("#")) {
             let hex = color.slice(1);
             if (hex.length === 3) {
-                hex = hex.split('').map(c => c + c).join('');
+                hex = hex
+                    .split("")
+                    .map((c) => c + c)
+                    .join("");
             }
             const r = parseInt(hex.slice(0, 2), 16) || 0;
             const g = parseInt(hex.slice(2, 4), 16) || 0;
@@ -100,41 +103,66 @@
                         content: sub.content || "",
                         subX: sub.subX !== undefined ? sub.subX : 50,
                         subY: sub.subY !== undefined ? sub.subY : 85,
-                        subWidth: sub.subWidth !== undefined ? sub.subWidth : 70,
-                        timeOffset: sub.timeOffset !== undefined ? sub.timeOffset : 0,
+                        subWidth:
+                            sub.subWidth !== undefined ? sub.subWidth : 70,
+                        timeOffset:
+                            sub.timeOffset !== undefined ? sub.timeOffset : 0,
                         fontSize: s.fontSize !== undefined ? s.fontSize : 28,
                         fontColor: s.fontColor || "#ffffff",
-                        backgroundColor: s.backgroundColor || "rgba(10, 10, 10, 0.85)",
+                        backgroundColor:
+                            s.backgroundColor || "rgba(10, 10, 10, 0.85)",
                         customFont: s.customFont || "",
-                        fontOpacity: s.fontOpacity !== undefined ? s.fontOpacity : 1.0,
-                        backgroundOpacity: s.backgroundOpacity !== undefined ? s.backgroundOpacity : 0.85,
+                        fontOpacity:
+                            s.fontOpacity !== undefined ? s.fontOpacity : 1.0,
+                        backgroundOpacity:
+                            s.backgroundOpacity !== undefined
+                                ? s.backgroundOpacity
+                                : 0.85,
                         animationType: s.animationType || "none",
-                        animationSpeed: s.animationSpeed !== undefined ? s.animationSpeed : 200,
+                        animationSpeed:
+                            s.animationSpeed !== undefined
+                                ? s.animationSpeed
+                                : 200,
                     };
                 });
             } else if (state.content !== undefined) {
                 // Fallback for single subtitle
                 const s = state.style || {};
-                activeSubtitles = [{
-                    content: state.content || "",
-                    subX: state.subX !== undefined ? state.subX : 50,
-                    subY: state.subY !== undefined ? state.subY : 85,
-                    subWidth: state.subWidth !== undefined ? state.subWidth : 70,
-                    timeOffset: state.timeOffset !== undefined ? state.timeOffset : 0,
-                    fontSize: s.fontSize !== undefined ? s.fontSize : 28,
-                    fontColor: s.fontColor || "#ffffff",
-                    backgroundColor: s.backgroundColor || "rgba(10, 10, 10, 0.85)",
-                    customFont: s.customFont || "",
-                    fontOpacity: s.fontOpacity !== undefined ? s.fontOpacity : 1.0,
-                    backgroundOpacity: s.backgroundOpacity !== undefined ? s.backgroundOpacity : 0.85,
-                    animationType: s.animationType || "none",
-                    animationSpeed: s.animationSpeed !== undefined ? s.animationSpeed : 200,
-                }];
+                activeSubtitles = [
+                    {
+                        content: state.content || "",
+                        subX: state.subX !== undefined ? state.subX : 50,
+                        subY: state.subY !== undefined ? state.subY : 85,
+                        subWidth:
+                            state.subWidth !== undefined ? state.subWidth : 70,
+                        timeOffset:
+                            state.timeOffset !== undefined
+                                ? state.timeOffset
+                                : 0,
+                        fontSize: s.fontSize !== undefined ? s.fontSize : 28,
+                        fontColor: s.fontColor || "#ffffff",
+                        backgroundColor:
+                            s.backgroundColor || "rgba(10, 10, 10, 0.85)",
+                        customFont: s.customFont || "",
+                        fontOpacity:
+                            s.fontOpacity !== undefined ? s.fontOpacity : 1.0,
+                        backgroundOpacity:
+                            s.backgroundOpacity !== undefined
+                                ? s.backgroundOpacity
+                                : 0.85,
+                        animationType: s.animationType || "none",
+                        animationSpeed:
+                            s.animationSpeed !== undefined
+                                ? s.animationSpeed
+                                : 200,
+                    },
+                ];
             } else if (state.content === "") {
                 activeSubtitles = [];
             }
 
-            if (state.scaleFactor !== undefined) scaleFactor = state.scaleFactor;
+            if (state.scaleFactor !== undefined)
+                scaleFactor = state.scaleFactor;
 
             if (state.customFontBase64 && state.customFontName) {
                 const fontName = state.customFontName;
@@ -164,27 +192,40 @@
 <div class="render-container">
     {#each activeSubtitles as sub}
         {#if sub.content}
-            <div 
+            <div
                 class="subtitle-block"
                 style="
                     left: {sub.subX}%; 
                     top: {sub.subY}%; 
                     width: {sub.subWidth}%; 
                     transform: translate(-50%, -50%);
-                    background: {hexOrRgbToRgba(sub.backgroundColor, sub.backgroundOpacity)};
-                    font-family: {sub.customFont || '-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif'};
-                    font-size: {sub.fontSize}px;
+                    background: {hexOrRgbToRgba(
+                    sub.backgroundColor,
+                    sub.backgroundOpacity,
+                )};
+                    font-family: {sub.customFont ||
+                    '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'};
+                    font-size: {sub.fontSize * scaleFactor}px;
                     color: {hexOrRgbToRgba(sub.fontColor, sub.fontOpacity)};
                     padding: {10 * scaleFactor}px {24 * scaleFactor}px;
                     border-radius: {8 * scaleFactor}px;
                     min-height: {50 * scaleFactor}px;
-                    -webkit-backdrop-filter: blur({8 * scaleFactor * sub.backgroundOpacity}px);
-                    backdrop-filter: blur({8 * scaleFactor * sub.backgroundOpacity}px);
-                    border: {1 * scaleFactor}px solid rgba(255, 255, 255, {0.1 * sub.backgroundOpacity});
-                    box-shadow: 0 {8 * scaleFactor}px {32 * scaleFactor}px rgba(0, 0, 0, {0.6 * sub.backgroundOpacity}), inset 0 0 0 {1 * scaleFactor}px rgba(255, 255, 255, {0.15 * sub.backgroundOpacity});
+                    -webkit-backdrop-filter: blur({8 *
+                    scaleFactor *
+                    sub.backgroundOpacity}px);
+                    backdrop-filter: blur({8 *
+                    scaleFactor *
+                    sub.backgroundOpacity}px);
+                    border: {1 * scaleFactor}px solid rgba(255, 255, 255, {0.1 *
+                    sub.backgroundOpacity});
+                    box-shadow: 0 {8 * scaleFactor}px {32 *
+                    scaleFactor}px rgba(0, 0, 0, {0.6 *
+                    sub.backgroundOpacity}), inset 0 0 0 {1 *
+                    scaleFactor}px rgba(255, 255, 255, {0.15 *
+                    sub.backgroundOpacity});
                 "
             >
-                {#if sub.animationType === 'glitch'}
+                {#if sub.animationType === "glitch"}
                     <GlitchText
                         text={sub.content}
                         speed={sub.animationSpeed / 200}
@@ -192,23 +233,27 @@
                         enableOnHover={false}
                     />
                 {:else}
-                    <div 
+                    <div
                         class="subtitle-text-render"
                         style="
-                            font-size: {sub.fontSize}px; 
-                            color: {hexOrRgbToRgba(sub.fontColor, sub.fontOpacity)}; 
-                            font-family: {sub.customFont || '-apple-system, BlinkMacSystemFont, \"Segoe UI\", Roboto, sans-serif'};
+                            font-size: {sub.fontSize * scaleFactor}px; 
+                            color: {hexOrRgbToRgba(
+                            sub.fontColor,
+                            sub.fontOpacity,
+                        )}; 
+                            font-family: {sub.customFont ||
+                            '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'};
                             line-height: 1.4;
                         "
                     >
-                        {#if sub.animationType === 'split-text'}
+                        {#if sub.animationType === "split-text"}
                             <SplitText
                                 text={sub.content}
                                 duration={sub.animationSpeed / 1000}
-                                delay={(sub.animationSpeed / 10) || 10}
+                                delay={sub.animationSpeed / 10 || 10}
                                 timeOffset={sub.timeOffset}
                             />
-                        {:else if sub.animationType === 'typing'}
+                        {:else if sub.animationType === "typing"}
                             <TypingText
                                 text={sub.content}
                                 typingSpeed={sub.animationSpeed ?? 50}
@@ -216,7 +261,7 @@
                                 loop={false}
                                 showCursor={true}
                             />
-                        {:else if sub.animationType === 'decrypt'}
+                        {:else if sub.animationType === "decrypt"}
                             <DecriptText
                                 text={sub.content}
                                 speed={sub.animationSpeed ?? 50}
@@ -235,7 +280,8 @@
 </div>
 
 <style>
-    :global(html), :global(body) {
+    :global(html),
+    :global(body) {
         margin: 0;
         padding: 0;
         width: 100%;

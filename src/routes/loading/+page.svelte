@@ -23,9 +23,9 @@
 
     async function generateSubtitle(videoUrl: string, count: number) {
         try {
-            const sub = await invoke<Pyres>("run_python", {
-                name: videoUrl,
-                count: count,
+            const sub = await invoke<Pyres>("getvideo", {
+                filename: videoUrl,
+                maxWords: count,
             });
             if (sub.status === "ok") {
                 const rawSubs = sub.message as any[];
