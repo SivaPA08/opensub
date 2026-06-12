@@ -126,3 +126,5 @@ export const subtitleAnimation = writable<SubtitleAnimationStyle>({
     animationType: 'none',
     animationSpeed: 200
 });
+
+export const selectedModel = writable<string>("small"); // Default model is small
