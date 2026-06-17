@@ -456,7 +456,7 @@ fn render_video(app: &AppHandle, config: RenderConfig) -> Result<PyResponse, Str
             let anim_type = sub.animation_type.as_deref()
                 .or(config.style.animation_type.as_deref())
                 .unwrap_or("none");
-            if !matches!(anim_type, "none" | "" | "pop-up" | "scale-in") {
+            if !matches!(anim_type, "none" | "" | "scale-in") {
                 is_animated = true;
                 break;
             }
@@ -491,8 +491,7 @@ fn render_video(app: &AppHandle, config: RenderConfig) -> Result<PyResponse, Str
                 let font_size = sub
                     .font_size
                     .or(config.style.font_size)
-                    .unwrap_or(28.0)
-                    * scale_factor;
+                    .unwrap_or(28.0);
 
                 let sub_style = RenderStateStyle {
                     fontSize: font_size,

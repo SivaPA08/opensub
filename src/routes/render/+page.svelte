@@ -4,6 +4,7 @@
     import SplitText from "$lib/animations/SplitText.svelte";
     import TypingText from "$lib/animations/TypingText.svelte";
     import DecriptText from "$lib/animations/DecriptText.svelte";
+    import PopUp from "$lib/animations/PopUp.svelte";
 
     type RenderSubtitle = {
         content: string;
@@ -268,6 +269,12 @@
                                 timeOffset={sub.timeOffset}
                                 animateOn="view"
                                 sequential={true}
+                            />
+                        {:else if sub.animationType === "pop-up"}
+                            <PopUp
+                                text={sub.content}
+                                speed={sub.animationSpeed}
+                                timeOffset={sub.timeOffset}
                             />
                         {:else}
                             {sub.content}
