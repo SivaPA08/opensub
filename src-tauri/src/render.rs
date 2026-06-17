@@ -69,8 +69,10 @@ pub struct RenderPosition {
 
 #[derive(Debug, Clone, Deserialize)]
 pub struct VideoInfo {
-    pub container_width: Option<u32>,
-    pub container_height: Option<u32>,
+    pub width: Option<f32>,
+    pub height: Option<f32>,
+    pub container_width: Option<f32>,
+    pub container_height: Option<f32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -266,7 +268,41 @@ fn resolve_build_dir(app: &AppHandle) -> Result<PathBuf, String> {
 }
 
 fn render_video(app: &AppHandle, config: RenderConfig) -> Result<PyResponse, String> {
-    let (width, height, fps, duration) = ffprobe_info(&config.input_path)?;
+    let (probe_width, probe_height, fps, duration) = ffprobe_info(&config.input_path)?;
+
+    let width = config
+        .video_info
+        .as_ref()
+        .and_then(|v| v.width)
+        .map(|w| w.round() as u32)
+        .filter(|&w| w > 0)
+        .unwrap_or(probe_width);
+    let height = config
+        .video_info
+        .as_ref()
+        .and_then(|v| v.height)
+        .map(|h| h.round() as u32)
+        .filter(|&h| h > 0)
+        .unwrap_or(probe_height);
+
+    let scale_factor = config
+        .video_info
+        .as_ref()
+        .and_then(|v| {
+            let video_h = v.height.filter(|&h| h > 0.0).unwrap_or(height as f32);
+            if let Some(container_h) = v.container_height.filter(|&h| h > 0.0) {
+                return Some(video_h / container_h);
+            }
+            if let (Some(container_w), Some(video_w)) = (
+                v.container_width.filter(|&w| w > 0.0),
+                v.width.filter(|&w| w > 0.0),
+            ) {
+                let container_h = container_w * video_h / video_w;
+                return Some(video_h / container_h);
+            }
+            None
+        })
+        .unwrap_or(1.0);
 
     let mut render_url = None;
     let mut _server_handle = None;
@@ -415,20 +451,6 @@ fn render_video(app: &AppHandle, config: RenderConfig) -> Result<PyResponse, Str
         sub_y: Some(85.0),
         sub_width: Some(70.0),
     });
-
-    let scale_factor = if let Some(v) = &config.video_info {
-        if let Some(ch) = v.container_height {
-            if ch > 0 {
-                height as f32 / ch as f32
-            } else {
-                1.0
-            }
-        } else {
-            1.0
-        }
-    } else {
-        1.0
-    };
 
     let total_frames = (duration * fps).round().max(1.0) as u32;
     let frame_interval_ms = (1000.0 / fps).round() as u64;

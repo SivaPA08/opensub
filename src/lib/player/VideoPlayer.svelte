@@ -11,8 +11,12 @@
         updateSubtitleProperties,
         pushUndoSnapshot,
         updateSubtitles,
+        videoPreviewMetrics,
         type Subtitle,
     } from "../store.js";
+    import {
+        toVideoFontSize,
+    } from "../subtitleScale.js";
     import { invoke } from "@tauri-apps/api/core";
     import { save } from "@tauri-apps/plugin-dialog";
     import { revealItemInDir } from "@tauri-apps/plugin-opener";
@@ -40,9 +44,14 @@
         unlistenRender = await listen<number>("render-progress", (event) => {
             renderProgress = Math.round(event.payload);
         });
+
+        if (typeof ResizeObserver !== "undefined") {
+            containerResizeObserver = new ResizeObserver(() => updatePreviewMetrics());
+        }
     });
 
     onDestroy(() => {
+        containerResizeObserver?.disconnect();
         if (unlistenRender) unlistenRender();
         if (videoElement) {
             videoElement.pause();
@@ -120,11 +129,43 @@
     let initialSubWidth = 70;
 
     let containerRef: HTMLDivElement;
+    let containerResizeObserver: ResizeObserver | undefined;
+
+    function updatePreviewMetrics() {
+        if (!containerRef || videoWidth <= 0 || videoHeight <= 0) return;
+        const rect = containerRef.getBoundingClientRect();
+        videoPreviewMetrics.set({
+            videoWidth,
+            videoHeight,
+            containerWidth: rect.width,
+            containerHeight: rect.height,
+        });
+    }
+
+    $: if (containerRef && videoWidth > 0 && videoHeight > 0) {
+        updatePreviewMetrics();
+    }
+
+    $: if (containerRef && containerResizeObserver) {
+        containerResizeObserver.disconnect();
+        containerResizeObserver.observe(containerRef);
+    }
 
     // Autofocus action for inline text editor
     function autofocus(node: HTMLTextAreaElement) {
         node.focus();
         node.select();
+    }
+
+    // Select the active subtitle in the global selection store
+    function selectActiveSubtitle() {
+        if (!activeSubtitle) return;
+        const targetIndex = $subtitle.findIndex(
+            (s) => s.start === activeSubtitle.start && s.end === activeSubtitle.end && s.content === activeSubtitle.content
+        );
+        if (targetIndex !== -1 && !$selectedSubtitleIndices.includes(targetIndex)) {
+            selectedSubtitleIndices.set([targetIndex]);
+        }
     }
 
     // Drag-to-Reposition Logic
@@ -134,6 +175,7 @@
 
         e.preventDefault();
         e.stopPropagation();
+        selectActiveSubtitle();
         pushUndoSnapshot(true);
         isDraggingSubtitle = true;
         dragStartX = e.clientX;
@@ -225,6 +267,7 @@
     }
 
     function handleSubtitleClick(e: MouseEvent) {
+        selectActiveSubtitle();
         showSizeControls = !showSizeControls;
     }
 
@@ -345,6 +388,22 @@
         renderSuccess = false;
 
         try {
+            updatePreviewMetrics();
+            const metrics = $videoPreviewMetrics;
+            const containerRect = containerRef?.getBoundingClientRect();
+            const containerWidth = containerRect?.width ?? metrics.containerWidth;
+            const containerHeight = containerRect?.height ?? metrics.containerHeight;
+
+            const resolveVideoFontSize = (previewFontSize: number | undefined) => {
+                if (previewFontSize === undefined) return undefined;
+                return toVideoFontSize(previewFontSize, {
+                    videoWidth,
+                    videoHeight,
+                    containerWidth,
+                    containerHeight,
+                });
+            };
+
             const config = {
                 input_path: $videoPath,
                 output_path: outputPath,
@@ -355,7 +414,7 @@
                     subX: s.subX,
                     subY: s.subY,
                     subWidth: s.subWidth,
-                    fontSize: s.fontSize,
+                    fontSize: resolveVideoFontSize(s.fontSize),
                     fontColor: s.fontColor,
                     backgroundColor: s.backgroundColor,
                     customFont: s.customFont,
@@ -365,7 +424,12 @@
                     animationSpeed: s.animationSpeed,
                 })),
                 style: {
-                    fontSize: $subtitleAnimation.fontSize,
+                    fontSize: toVideoFontSize($subtitleAnimation.fontSize, {
+                        videoWidth,
+                        videoHeight,
+                        containerWidth,
+                        containerHeight,
+                    }),
                     fontColor: $subtitleAnimation.fontColor,
                     backgroundColor: $subtitleAnimation.backgroundColor,
                     customFont: $subtitleAnimation.customFont,
@@ -383,12 +447,8 @@
                 video_info: {
                     width: videoWidth,
                     height: videoHeight,
-                    container_width: containerRef
-                        ? containerRef.clientWidth
-                        : videoWidth,
-                    container_height: containerRef
-                        ? containerRef.clientHeight
-                        : videoHeight,
+                    container_width: containerWidth,
+                    container_height: containerHeight,
                 },
             };
 
