@@ -708,9 +708,7 @@
                                 {#if activeAnimationType === 'glitch'}
                                     <GlitchText
                                         text={activeSubtitle.content}
-                                        speed={activeAnimationSpeed / 200}
-                                        enableShadows={true}
-                                        enableOnHover={false}
+                                        speed={activeAnimationSpeed}
                                     />
                                 {:else if activeAnimationType === 'split-text'}
                                     <SplitText

@@ -1,167 +1,246 @@
 <script lang="ts">
+    import { onMount, onDestroy, tick } from "svelte";
+    import { gsap } from "gsap";
+
     export let text: string = "";
-    export let speed: number = 1;
-    export let enableShadows: boolean = true;
-    export let enableOnHover: boolean = true;
+    export let speed: number = 200;
     export let className: string = "";
+    export let timeOffset: number | undefined = undefined;
 
-    $: inlineStyles = `
-        --after-duration: ${speed * 3}s;
-        --before-duration: ${speed * 2}s;
-        --after-shadow: ${enableShadows ? "-5px 0 red" : "none"};
-        --before-shadow: ${enableShadows ? "5px 0 cyan" : "none"};
-    `;
+    let containerEl: HTMLElement | undefined = undefined;
+    let timeline: any = null;
 
-    $: hoverClass = enableOnHover ? "enable-on-hover" : "";
+    function buildTimeline() {
+        if (!containerEl) return;
+
+        const target = containerEl.querySelector<HTMLElement>(
+            "[data-glitch-target]",
+        );
+        if (!target) return;
+
+        timeline?.kill();
+
+        const durationSec = speed / 1000;
+
+        timeline = gsap.timeline({ paused: timeOffset !== undefined });
+
+        gsap.set(target, {
+            opacity: 0,
+            x: 0,
+            y: 0,
+            skewX: 0,
+            filter: "blur(0px)",
+        });
+
+        timeline.to(target, {
+            opacity: 1,
+            duration: durationSec * 0.12,
+            ease: "none",
+        });
+
+        timeline.to(target, {
+            keyframes: [
+                { x: -4, y: 1, skewX: 8, duration: 0.04 },
+                { x: 3, y: -1, skewX: -10, duration: 0.04 },
+                { x: -2, y: 0, skewX: 6, duration: 0.03 },
+                { x: 5, y: 1, skewX: -8, duration: 0.05 },
+                { x: -3, y: -1, skewX: 4, duration: 0.03 },
+                { x: 0, y: 0, skewX: 0, duration: 0.06 },
+            ],
+            duration: durationSec * 0.42,
+            ease: "none",
+        });
+
+        timeline.to(target, {
+            keyframes: [
+                { x: 2, duration: 0.02 },
+                { x: -2, duration: 0.02 },
+                { x: 1, duration: 0.02 },
+                { x: 0, duration: 0.04 },
+            ],
+            duration: durationSec * 0.18,
+            ease: "none",
+        });
+
+        timeline.to(target, {
+            opacity: 1,
+            x: 0,
+            y: 0,
+            skewX: 0,
+            duration: durationSec * 0.12,
+            ease: "power2.out",
+        });
+
+        if (timeOffset !== undefined) {
+            timeline.seek(timeOffset);
+        }
+    }
+
+    $: if (timeOffset !== undefined && timeline) {
+        timeline.seek(timeOffset);
+    }
+
+    let signature = "";
+    $: {
+        const newSig = `${text}|${speed}`;
+        if (newSig !== signature) {
+            signature = newSig;
+            tick().then(() => buildTimeline());
+        }
+    }
+
+    onMount(() => {
+        tick().then(() => buildTimeline());
+
+        return () => {
+            timeline?.kill();
+        };
+    });
+
+    onDestroy(() => {
+        timeline?.kill();
+    });
 </script>
 
-<div
-    class={`glitch ${hoverClass} ${className}`.trim()}
-    style={inlineStyles}
-    data-text={text}
->
-    {text}
-</div>
+{#key text}
+    <span bind:this={containerEl} class="pop-up-wrapper {className}">
+        <span class="pop-up-target" data-glitch-target="true" data-text={text}>
+            {text}
+        </span>
+    </span>
+{/key}
 
 <style>
-    .glitch {
-        color: inherit;
-        font-size: inherit;
-        font-family: inherit;
-        font-weight: inherit;
-        white-space: pre-wrap;
-        word-break: break-word;
-        position: relative;
-        margin: 0 auto;
-        user-select: none;
-        cursor: pointer;
+    .pop-up-wrapper {
         display: inline-block;
         width: 100%;
-        box-sizing: border-box;
     }
 
-    .glitch::after,
-    .glitch::before {
+    .pop-up-target {
+        position: relative;
+        display: inline-block;
+        transform-origin: center;
+        will-change: transform, opacity, filter;
+        color: white;
+        text-shadow: 0 0 12px rgba(255, 255, 255, 0.12);
+    }
+
+    .pop-up-target::before,
+    .pop-up-target::after {
         content: attr(data-text);
         position: absolute;
-        top: 0;
-        left: 0;
-        width: 100%;
-        height: 100%;
-        color: inherit;
-        background: inherit;
-        font-family: inherit;
-        font-weight: inherit;
-        white-space: pre-wrap;
-        word-break: break-word;
-        overflow: hidden;
-        clip-path: inset(0 0 0 0);
+        inset: 0;
         pointer-events: none;
-        box-sizing: border-box;
+        opacity: 0.95;
     }
 
-    .glitch:not(.enable-on-hover)::after {
-        left: 10px;
-        text-shadow: var(--after-shadow, -10px 0 red);
-        animation: animate-glitch var(--after-duration, 3s) infinite linear
-            alternate-reverse;
+    .pop-up-target::before {
+        left: 2px;
+        color: #00e5ff;
+        text-shadow: -2px 0 #00e5ff;
+        animation: glitchTop 1.4s infinite steps(1, end);
+        clip-path: inset(0 0 80% 0);
     }
 
-    .glitch:not(.enable-on-hover)::before {
-        left: -10px;
-        text-shadow: var(--before-shadow, 10px 0 cyan);
-        animation: animate-glitch var(--before-duration, 2s) infinite linear
-            alternate-reverse;
+    .pop-up-target::after {
+        left: -2px;
+        color: #ff2bd6;
+        text-shadow: 2px 0 #ff2bd6;
+        animation: glitchBottom 1.1s infinite steps(1, end);
+        clip-path: inset(75% 0 0 0);
     }
 
-    .glitch.enable-on-hover::after,
-    .glitch.enable-on-hover::before {
-        content: "";
-        opacity: 0;
-        animation: none;
-    }
-
-    .glitch.enable-on-hover:hover::after {
-        content: attr(data-text);
-        opacity: 1;
-        left: 10px;
-        text-shadow: var(--after-shadow, -10px 0 red);
-        animation: animate-glitch var(--after-duration, 3s) infinite linear
-            alternate-reverse;
-    }
-
-    .glitch.enable-on-hover:hover::before {
-        content: attr(data-text);
-        opacity: 1;
-        left: -10px;
-        text-shadow: var(--before-shadow, 10px 0 cyan);
-        animation: animate-glitch var(--before-duration, 2s) infinite linear
-            alternate-reverse;
-    }
-
-    @keyframes animate-glitch {
+    @keyframes glitchTop {
         0% {
-            clip-path: inset(20% 0 50% 0);
-        }
-        5% {
-            clip-path: inset(10% 0 60% 0);
+            clip-path: inset(0 0 90% 0);
+            transform: translate(0, 0);
         }
         10% {
-            clip-path: inset(15% 0 55% 0);
-        }
-        15% {
-            clip-path: inset(25% 0 35% 0);
+            clip-path: inset(0 0 65% 0);
+            transform: translate(-2px, -1px);
         }
         20% {
-            clip-path: inset(30% 0 40% 0);
-        }
-        25% {
-            clip-path: inset(40% 0 20% 0);
+            clip-path: inset(0 0 35% 0);
+            transform: translate(4px, 0px);
         }
         30% {
-            clip-path: inset(10% 0 60% 0);
-        }
-        35% {
-            clip-path: inset(15% 0 55% 0);
+            clip-path: inset(0 0 78% 0);
+            transform: translate(-4px, 1px);
         }
         40% {
-            clip-path: inset(25% 0 35% 0);
-        }
-        45% {
-            clip-path: inset(30% 0 40% 0);
+            clip-path: inset(0 0 50% 0);
+            transform: translate(2px, -1px);
         }
         50% {
-            clip-path: inset(20% 0 50% 0);
-        }
-        55% {
-            clip-path: inset(10% 0 60% 0);
+            clip-path: inset(0 0 20% 0);
+            transform: translate(-3px, 1px);
         }
         60% {
-            clip-path: inset(15% 0 55% 0);
-        }
-        65% {
-            clip-path: inset(25% 0 35% 0);
+            clip-path: inset(0 0 72% 0);
+            transform: translate(5px, 0px);
         }
         70% {
-            clip-path: inset(30% 0 40% 0);
-        }
-        75% {
-            clip-path: inset(40% 0 20% 0);
+            clip-path: inset(0 0 45% 0);
+            transform: translate(-2px, -1px);
         }
         80% {
-            clip-path: inset(20% 0 50% 0);
-        }
-        85% {
-            clip-path: inset(10% 0 60% 0);
+            clip-path: inset(0 0 85% 0);
+            transform: translate(3px, 0px);
         }
         90% {
-            clip-path: inset(15% 0 55% 0);
-        }
-        95% {
-            clip-path: inset(25% 0 35% 0);
+            clip-path: inset(0 0 30% 0);
+            transform: translate(-1px, 1px);
         }
         100% {
-            clip-path: inset(30% 0 40% 0);
+            clip-path: inset(0 0 60% 0);
+            transform: translate(0, 0);
+        }
+    }
+
+    @keyframes glitchBottom {
+        0% {
+            clip-path: inset(85% 0 0 0);
+            transform: translate(0, 0);
+        }
+        10% {
+            clip-path: inset(60% 0 0 0);
+            transform: translate(2px, 1px);
+        }
+        20% {
+            clip-path: inset(30% 0 0 0);
+            transform: translate(-4px, 0px);
+        }
+        30% {
+            clip-path: inset(75% 0 0 0);
+            transform: translate(4px, -1px);
+        }
+        40% {
+            clip-path: inset(48% 0 0 0);
+            transform: translate(-2px, 1px);
+        }
+        50% {
+            clip-path: inset(15% 0 0 0);
+            transform: translate(3px, -1px);
+        }
+        60% {
+            clip-path: inset(70% 0 0 0);
+            transform: translate(-5px, 1px);
+        }
+        70% {
+            clip-path: inset(40% 0 0 0);
+            transform: translate(2px, 0px);
+        }
+        80% {
+            clip-path: inset(82% 0 0 0);
+            transform: translate(-3px, 1px);
+        }
+        90% {
+            clip-path: inset(25% 0 0 0);
+            transform: translate(1px, -1px);
+        }
+        100% {
+            clip-path: inset(55% 0 0 0);
+            transform: translate(0, 0);
         }
     }
 </style>

@@ -231,9 +231,8 @@
                 {#if sub.animationType === "glitch"}
                     <GlitchText
                         text={sub.content}
-                        speed={sub.animationSpeed / 200}
-                        enableShadows={true}
-                        enableOnHover={false}
+                        speed={sub.animationSpeed}
+                        timeOffset={sub.timeOffset}
                     />
                 {:else}
                     <div
