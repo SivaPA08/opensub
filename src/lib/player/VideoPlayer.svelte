@@ -21,6 +21,7 @@
     import SplitText from "../animations/SplitText.svelte";
     import TypingText from "../animations/TypingText.svelte";
     import DecriptText from "../animations/DecriptText.svelte";
+    import PopUp from "../animations/PopUp.svelte";
 
     let videoElement: HTMLVideoElement;
     let videoSrc = "";
@@ -572,7 +573,7 @@
                     <!-- svelte-ignore a11y_click_events_have_key_events -->
                     <!-- svelte-ignore a11y_no_static_element_interactions -->
                     <div
-                        class="subtitle-block {activeAnimationType === 'scale-in' ? 'animate-scale-in' : activeAnimationType === 'pop-up' ? 'animate-pop-up' : ''}"
+                        class="subtitle-block {activeAnimationType === 'scale-in' ? 'animate-scale-in' : ''}"
                         style="
                             left: {subX}%; 
                             top: {subY}%; 
@@ -668,6 +669,11 @@
                                         speed={activeAnimationSpeed}
                                         animateOn="view"
                                         sequential={true}
+                                    />
+                                {:else if activeAnimationType === 'pop-up'}
+                                    <PopUp
+                                        text={activeSubtitle.content}
+                                        speed={activeAnimationSpeed}
                                     />
                                 {:else}
                                     {activeSubtitle.content}
@@ -1496,12 +1502,6 @@
         animation: scaleIn var(--anim-speed, 200ms) cubic-bezier(0.34, 1.56, 0.64, 1) both;
     }
 
-    .animate-pop-up {
-        animation: popText var(--anim-speed, 240ms) cubic-bezier(0.2, 0.8, 0.2, 1) both;
-        transform-origin: center;
-        will-change: transform, opacity, filter;
-    }
-
     @keyframes fadeIn {
         from {
             opacity: 0;
@@ -1521,24 +1521,6 @@
         to {
             opacity: 1;
             transform: translate(-50%, -50%) scale(1) translateY(0);
-        }
-    }
-
-    @keyframes popText {
-        0% {
-            opacity: 0;
-            transform: translate(-50%, -50%) scale(0.88) translateY(8px);
-            filter: blur(2px);
-        }
-        65% {
-            opacity: 1;
-            transform: translate(-50%, -50%) scale(1.04) translateY(0);
-            filter: blur(0);
-        }
-        100% {
-            opacity: 1;
-            transform: translate(-50%, -50%) scale(1) translateY(0);
-            filter: blur(0);
         }
     }
 </style>

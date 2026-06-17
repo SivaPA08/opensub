@@ -456,7 +456,7 @@ fn render_video(app: &AppHandle, config: RenderConfig) -> Result<PyResponse, Str
             let anim_type = sub.animation_type.as_deref()
                 .or(config.style.animation_type.as_deref())
                 .unwrap_or("none");
-            if !matches!(anim_type, "none" | "" | "pop-up" | "scale-in") {
+            if !matches!(anim_type, "none" | "" | "scale-in") {
                 is_animated = true;
                 break;
             }
