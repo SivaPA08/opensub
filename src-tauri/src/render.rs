@@ -491,8 +491,7 @@ fn render_video(app: &AppHandle, config: RenderConfig) -> Result<PyResponse, Str
                 let font_size = sub
                     .font_size
                     .or(config.style.font_size)
-                    .unwrap_or(28.0)
-                    * scale_factor;
+                    .unwrap_or(28.0);
 
                 let sub_style = RenderStateStyle {
                     fontSize: font_size,
