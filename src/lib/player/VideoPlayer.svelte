@@ -72,9 +72,19 @@
     $: containerAspectRatio =
         videoWidth && videoHeight ? `${videoWidth} / ${videoHeight}` : "16 / 9";
 
-    $: activeSubtitle = $subtitle.find(
+    $: activeSubtitles = $subtitle.filter(
         (sub) => $videoCurrentTime >= sub.start && $videoCurrentTime <= sub.end,
     );
+
+    $: activeSubtitle = (() => {
+        for (const sub of activeSubtitles) {
+            const idx = $subtitle.indexOf(sub);
+            if ($selectedSubtitleIndices.includes(idx)) {
+                return sub;
+            }
+        }
+        return activeSubtitles[0];
+    })();
 
     let showSizeControls = false;
     let isEditingText = false;
@@ -91,6 +101,25 @@
         subX = activeSubtitle.subX !== undefined ? activeSubtitle.subX : 50;
         subY = activeSubtitle.subY !== undefined ? activeSubtitle.subY : 85;
         subWidth = activeSubtitle.subWidth !== undefined ? activeSubtitle.subWidth : 70;
+    }
+
+    let draggingSubtitle: Subtitle | null = null;
+    let resizingSubtitle: Subtitle | null = null;
+
+    function getSubStyle(sub: Subtitle) {
+        return {
+            x: sub.subX !== undefined ? sub.subX : 50,
+            y: sub.subY !== undefined ? sub.subY : 85,
+            width: sub.subWidth !== undefined ? sub.subWidth : 70,
+            fontSize: sub.fontSize !== undefined ? sub.fontSize : $subtitleAnimation.fontSize,
+            fontColor: sub.fontColor !== undefined ? sub.fontColor : $subtitleAnimation.fontColor,
+            backgroundColor: sub.backgroundColor !== undefined ? sub.backgroundColor : $subtitleAnimation.backgroundColor,
+            customFont: sub.customFont !== undefined ? sub.customFont : $subtitleAnimation.customFont,
+            fontOpacity: sub.fontOpacity !== undefined ? sub.fontOpacity : ($subtitleAnimation.fontOpacity ?? 1.0),
+            backgroundOpacity: sub.backgroundOpacity !== undefined ? sub.backgroundOpacity : ($subtitleAnimation.backgroundOpacity ?? 0.85),
+            animationType: sub.animationType !== undefined ? sub.animationType : ($subtitleAnimation.animationType ?? 'none'),
+            animationSpeed: sub.animationSpeed !== undefined ? sub.animationSpeed : ($subtitleAnimation.animationSpeed ?? 200),
+        };
     }
 
     // Resolved styles for active subtitle falling back to global settings
@@ -113,9 +142,18 @@
         const indicesToUpdate = isSelected ? $selectedSubtitleIndices : [targetIndex];
 
         const updates: Partial<Subtitle> = {};
-        if (x !== undefined) updates.subX = x;
-        if (y !== undefined) updates.subY = y;
-        if (width !== undefined) updates.subWidth = width;
+        if (x !== undefined) {
+            updates.subX = x;
+            if (targetSub === activeSubtitle) subX = x;
+        }
+        if (y !== undefined) {
+            updates.subY = y;
+            if (targetSub === activeSubtitle) subY = y;
+        }
+        if (width !== undefined) {
+            updates.subWidth = width;
+            if (targetSub === activeSubtitle) subWidth = width;
+        }
 
         updateSubtitleProperties(indicesToUpdate, updates, { recordUndo: false });
     }
@@ -160,10 +198,10 @@
     }
 
     // Select the active subtitle in the global selection store
-    function selectActiveSubtitle() {
-        if (!activeSubtitle) return;
+    function selectSubtitle(sub: Subtitle) {
+        if (!sub) return;
         const targetIndex = $subtitle.findIndex(
-            (s) => s.start === activeSubtitle.start && s.end === activeSubtitle.end && s.content === activeSubtitle.content
+            (s) => s.start === sub.start && s.end === sub.end && s.content === sub.content
         );
         if (targetIndex !== -1 && !$selectedSubtitleIndices.includes(targetIndex)) {
             selectedSubtitleIndices.set([targetIndex]);
@@ -171,26 +209,27 @@
     }
 
     // Drag-to-Reposition Logic
-    function startSubtitleDrag(e: MouseEvent) {
+    function startSubtitleDrag(e: MouseEvent, sub: Subtitle) {
         const target = e.target as HTMLElement;
         if (target.classList.contains("resize-handle") || isEditingText) return;
 
         e.preventDefault();
         e.stopPropagation();
-        selectActiveSubtitle();
+        selectSubtitle(sub);
         pushUndoSnapshot(true);
+        draggingSubtitle = sub;
         isDraggingSubtitle = true;
         dragStartX = e.clientX;
         dragStartY = e.clientY;
-        initialSubX = subX;
-        initialSubY = subY;
+        initialSubX = sub.subX !== undefined ? sub.subX : 50;
+        initialSubY = sub.subY !== undefined ? sub.subY : 85;
 
         window.addEventListener("mousemove", handleSubtitleDrag);
         window.addEventListener("mouseup", stopSubtitleDrag);
     }
 
     function handleSubtitleDrag(e: MouseEvent) {
-        if (!isDraggingSubtitle || !containerRef || !activeSubtitle) return;
+        if (!isDraggingSubtitle || !containerRef || !draggingSubtitle) return;
 
         const rect = containerRef.getBoundingClientRect();
         const dx = e.clientX - dragStartX;
@@ -202,46 +241,46 @@
         const newSubX = Math.max(5, Math.min(95, initialSubX + pctDx));
         const newSubY = Math.max(5, Math.min(95, initialSubY + pctDy));
 
-        subX = newSubX;
-        subY = newSubY;
-
-        saveSubtitlePosition(activeSubtitle, newSubX, newSubY, undefined);
+        saveSubtitlePosition(draggingSubtitle, newSubX, newSubY, undefined);
     }
 
     function stopSubtitleDrag() {
         isDraggingSubtitle = false;
+        draggingSubtitle = null;
         window.removeEventListener("mousemove", handleSubtitleDrag);
         window.removeEventListener("mouseup", stopSubtitleDrag);
     }
 
     // Drag-to-Resize Logic
-    function startSubtitleResize(e: MouseEvent) {
+    function startSubtitleResize(e: MouseEvent, sub: Subtitle) {
         e.preventDefault();
         e.stopPropagation();
+        selectSubtitle(sub);
         pushUndoSnapshot(true);
+        resizingSubtitle = sub;
         isResizingSubtitle = true;
         resizeStartX = e.clientX;
-        initialSubWidth = subWidth;
+        initialSubWidth = sub.subWidth !== undefined ? sub.subWidth : 70;
 
         window.addEventListener("mousemove", handleSubtitleResize);
         window.addEventListener("mouseup", stopSubtitleResize);
     }
 
     function handleSubtitleResize(e: MouseEvent) {
-        if (!isResizingSubtitle || !containerRef || !activeSubtitle) return;
+        if (!isResizingSubtitle || !containerRef || !resizingSubtitle) return;
 
         const rect = containerRef.getBoundingClientRect();
         const dx = e.clientX - resizeStartX;
         const pctDx = (dx / rect.width) * 100 * 2; // Resize from center
 
         const newSubWidth = Math.max(20, Math.min(95, initialSubWidth + pctDx));
-        subWidth = newSubWidth;
 
-        saveSubtitlePosition(activeSubtitle, undefined, undefined, newSubWidth);
+        saveSubtitlePosition(resizingSubtitle, undefined, undefined, newSubWidth);
     }
 
     function stopSubtitleResize() {
         isResizingSubtitle = false;
+        resizingSubtitle = null;
         window.removeEventListener("mousemove", handleSubtitleResize);
         window.removeEventListener("mouseup", stopSubtitleResize);
     }
@@ -268,9 +307,13 @@
         isEditingText = true;
     }
 
-    function handleSubtitleClick(e: MouseEvent) {
-        selectActiveSubtitle();
-        showSizeControls = !showSizeControls;
+    function handleSubtitleClick(e: MouseEvent, sub: Subtitle) {
+        if (activeSubtitle === sub) {
+            showSizeControls = !showSizeControls;
+        } else {
+            selectSubtitle(sub);
+            showSizeControls = true;
+        }
     }
 
     function changeSize(delta: number) {
@@ -567,200 +610,205 @@
 
             <!-- Subtitle Overlay -->
             <div class="subtitle-overlay">
-                {#if activeSubtitle}
-                    <!-- Floating Popover Controls -->
-                    {#if showSizeControls}
-                        <!-- svelte-ignore a11y_no_static_element_interactions -->
-                        <div
-                            class="size-controls-popover animate-scale-in"
-                            on:mousedown|stopPropagation
-                        >
-                            <div class="popover-header">
-                                <span class="popover-title"
-                                    >Subtitle Properties</span
-                                >
-                                <button
-                                    class="close-btn"
-                                    on:click={() => (showSizeControls = false)}
-                                    >×</button
-                                >
-                            </div>
-
-                            <div class="popover-section">
-                                <span class="section-label"
-                                    >Font Size: <span class="val-highlight"
-                                        >{activeFontSize}px</span
-                                    ></span
-                                >
-                                <div class="slider-row">
-                                    <button
-                                        class="adjust-btn"
-                                        on:click={() => changeSize(-2)}
-                                        >A-</button
-                                    >
-                                    <input
-                                        type="range"
-                                        min="12"
-                                        max="80"
-                                        value={activeFontSize}
-                                        on:input={(e) => updateFontSize(parseInt(e.currentTarget.value))}
-                                        class="size-slider"
-                                    />
-                                    <button
-                                        class="adjust-btn"
-                                        on:click={() => changeSize(2)}
-                                        >A+</button
-                                    >
-                                </div>
-                            </div>
-
-                            <div class="popover-section">
-                                <span class="section-label"
-                                    >Edit text content:</span
-                                >
-                                <textarea
-                                    value={activeSubtitle.content}
-                                    on:input={(e) =>
-                                        updateSubtitleText(
-                                            activeSubtitle,
-                                            e.currentTarget.value,
-                                        )}
-                                    class="edit-textarea"
-                                    rows="2"
-                                ></textarea>
-                            </div>
-                        </div>
-                    {/if}
-
-                    <!-- svelte-ignore a11y_click_events_have_key_events -->
-                    <!-- svelte-ignore a11y_no_static_element_interactions -->
-                    <div
-                        class="subtitle-block {activeAnimationType === 'scale-in' ? 'animate-scale-in' : ''}"
-                        style="
-                            left: {subX}%; 
-                            top: {subY}%; 
-                            width: {subWidth}%; 
-                            transform: translate(-50%, -50%);
-                            --anim-speed: {activeAnimationSpeed}ms;
-                            background: {hexOrRgbToRgba(
-                            activeBackgroundColor,
-                            activeBackgroundOpacity,
-                        )};
-                            font-family: {activeCustomFont};
-                            font-size: {activeFontSize}px;
-                            color: {hexOrRgbToRgba(
-                            activeFontColor,
-                            activeFontOpacity,
-                        )};
-                            -webkit-backdrop-filter: blur({8 *
-                            activeBackgroundOpacity}px);
-                            backdrop-filter: blur({8 *
-                            activeBackgroundOpacity}px);
-                            border: 1px solid rgba(255, 255, 255, {0.1 *
-                            activeBackgroundOpacity});
-                            box-shadow: 0 8px 32px rgba(0, 0, 0, {0.6 *
-                            activeBackgroundOpacity}), inset 0 0 0 1px rgba(255, 255, 255, {0.15 *
-                            activeBackgroundOpacity});
-                        "
-                        on:mousedown={startSubtitleDrag}
-                        on:click|stopPropagation={handleSubtitleClick}
-                    >
-                        {#if isEditingText}
-                            <textarea
-                                class="subtitle-textarea"
-                                style="font-size: {activeFontSize}px; color: {hexOrRgbToRgba(
-                                    activeFontColor,
-                                    activeFontOpacity,
-                                )}; font-family: {activeCustomFont};"
-                                value={activeSubtitle.content}
-                                on:input={(e) =>
-                                    updateSubtitleText(
-                                        activeSubtitle,
-                                        e.currentTarget.value,
-                                    )}
-                                on:blur={() => {
-                                    isEditingText = false;
-                                    textEditUndoRecorded = false;
-                                }}
-                                on:click|stopPropagation
-                                on:keydown={(e) => {
-                                    if (e.key === "Enter" && !e.shiftKey) {
-                                        e.preventDefault();
-                                        isEditingText = false;
-                                    }
-                                }}
-                                use:autofocus
-                            ></textarea>
-                        {:else}
-                            <!-- svelte-ignore a11y_click_events_have_key_events -->
+                {#if activeSubtitles.length > 0}
+                    {#each activeSubtitles as sub (sub)}
+                        {@const style = getSubStyle(sub)}
+                        <!-- Floating Popover Controls -->
+                        {#if showSizeControls && activeSubtitle === sub}
                             <!-- svelte-ignore a11y_no_static_element_interactions -->
                             <div
-                                class="subtitle-text-render"
-                                style="font-size: {activeFontSize}px; color: {hexOrRgbToRgba(
-                                    activeFontColor,
-                                    activeFontOpacity,
-                                )}; font-family: {activeCustomFont};"
-                                on:dblclick={() => {
-                                    textEditUndoRecorded = false;
-                                    isEditingText = true;
-                                }}
+                                class="size-controls-popover animate-scale-in"
+                                on:mousedown|stopPropagation
                             >
-                                {#if activeAnimationType === 'glitch'}
-                                    <GlitchText
-                                        text={activeSubtitle.content}
-                                        speed={activeAnimationSpeed}
-                                    />
-                                {:else if activeAnimationType === 'split-text'}
-                                    <SplitText
-                                        text={activeSubtitle.content}
-                                        duration={activeAnimationSpeed / 1000}
-                                        delay={(activeAnimationSpeed / 10) || 10}
-                                    />
-                                {:else if activeAnimationType === 'typing'}
-                                    <TypingText
-                                        text={activeSubtitle.content}
-                                        typingSpeed={activeAnimationSpeed}
-                                        loop={false}
-                                        showCursor={true}
-                                    />
-                                {:else if activeAnimationType === 'decrypt'}
-                                    <DecriptText
-                                        text={activeSubtitle.content}
-                                        speed={activeAnimationSpeed}
-                                        animateOn="view"
-                                        sequential={true}
-                                    />
-                                {:else if activeAnimationType === 'pop-up'}
-                                    <PopUp
-                                        text={activeSubtitle.content}
-                                        speed={activeAnimationSpeed}
-                                    />
-                                {:else if activeAnimationType === 'bottom-to-top'}
-                                    <BottomToTop
-                                        text={activeSubtitle.content}
-                                        speed={activeAnimationSpeed}
-                                    />
-                                {:else if activeAnimationType === 'wave'}
-                                    <Wave
-                                        text={activeSubtitle.content}
-                                        speed={activeAnimationSpeed}
-                                    />
-                                {:else}
-                                    {activeSubtitle.content}
-                                {/if}
-                                <span class="edit-hint"
-                                    >Double-click to edit text</span
-                                >
+                                <div class="popover-header">
+                                    <span class="popover-title"
+                                        >Subtitle Properties</span
+                                    >
+                                    <button
+                                        class="close-btn"
+                                        on:click={() => (showSizeControls = false)}
+                                        >×</button
+                                    >
+                                </div>
+
+                                <div class="popover-section">
+                                    <span class="section-label"
+                                        >Font Size: <span class="val-highlight"
+                                            >{style.fontSize}px</span
+                                        ></span
+                                    >
+                                    <div class="slider-row">
+                                        <button
+                                            class="adjust-btn"
+                                            on:click={() => changeSize(-2)}
+                                            >A-</button
+                                        >
+                                        <input
+                                            type="range"
+                                            min="12"
+                                            max="80"
+                                            value={style.fontSize}
+                                            on:input={(e) => updateFontSize(parseInt(e.currentTarget.value))}
+                                            class="size-slider"
+                                        />
+                                        <button
+                                            class="adjust-btn"
+                                            on:click={() => changeSize(2)}
+                                            >A+</button
+                                        >
+                                    </div>
+                                </div>
+
+                                <div class="popover-section">
+                                    <span class="section-label"
+                                        >Edit text content:</span
+                                    >
+                                    <textarea
+                                        value={sub.content}
+                                        on:input={(e) =>
+                                            updateSubtitleText(
+                                                sub,
+                                                e.currentTarget.value,
+                                            )}
+                                        class="edit-textarea"
+                                        rows="2"
+                                    ></textarea>
+                                </div>
                             </div>
                         {/if}
 
-                        <!-- Resize Handle in Bottom-Right Corner -->
+                        <!-- svelte-ignore a11y_click_events_have_key_events -->
                         <!-- svelte-ignore a11y_no_static_element_interactions -->
                         <div
-                            class="resize-handle"
-                            on:mousedown={startSubtitleResize}
-                        ></div>
-                    </div>
+                            class="subtitle-block {style.animationType === 'scale-in' ? 'animate-scale-in' : ''}"
+                            class:selected={activeSubtitle === sub}
+                            style="
+                                left: {style.x}%; 
+                                top: {style.y}%; 
+                                width: {style.width}%; 
+                                transform: translate(-50%, -50%);
+                                --anim-speed: {style.animationSpeed}ms;
+                                background: {hexOrRgbToRgba(
+                                    style.backgroundColor,
+                                    style.backgroundOpacity,
+                                )};
+                                font-family: {style.customFont};
+                                font-size: {style.fontSize}px;
+                                color: {hexOrRgbToRgba(
+                                    style.fontColor,
+                                    style.fontOpacity,
+                                )};
+                                -webkit-backdrop-filter: blur({8 *
+                                    style.backgroundOpacity}px);
+                                backdrop-filter: blur({8 *
+                                    style.backgroundOpacity}px);
+                                border: 1px solid rgba(255, 255, 255, {0.1 *
+                                    style.backgroundOpacity});
+                                box-shadow: 0 8px 32px rgba(0, 0, 0, {0.6 *
+                                    style.backgroundOpacity}), inset 0 0 0 1px rgba(255, 255, 255, {0.15 *
+                                    style.backgroundOpacity});
+                            "
+                            on:mousedown={(e) => startSubtitleDrag(e, sub)}
+                            on:click|stopPropagation={(e) => handleSubtitleClick(e, sub)}
+                        >
+                            {#if isEditingText && activeSubtitle === sub}
+                                <textarea
+                                    class="subtitle-textarea"
+                                    style="font-size: {style.fontSize}px; color: {hexOrRgbToRgba(
+                                        style.fontColor,
+                                        style.fontOpacity,
+                                    )}; font-family: {style.customFont};"
+                                    value={sub.content}
+                                    on:input={(e) =>
+                                        updateSubtitleText(
+                                            sub,
+                                            e.currentTarget.value,
+                                        )}
+                                    on:blur={() => {
+                                        isEditingText = false;
+                                        textEditUndoRecorded = false;
+                                    }}
+                                    on:click|stopPropagation
+                                    on:keydown={(e) => {
+                                        if (e.key === "Enter" && !e.shiftKey) {
+                                            e.preventDefault();
+                                            isEditingText = false;
+                                        }
+                                    }}
+                                    use:autofocus
+                                ></textarea>
+                            {:else}
+                                <!-- svelte-ignore a11y_click_events_have_key_events -->
+                                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                                <div
+                                    class="subtitle-text-render"
+                                    style="font-size: {style.fontSize}px; color: {hexOrRgbToRgba(
+                                        style.fontColor,
+                                        style.fontOpacity,
+                                    )}; font-family: {style.customFont};"
+                                    on:dblclick={() => {
+                                        textEditUndoRecorded = false;
+                                        isEditingText = true;
+                                        selectSubtitle(sub);
+                                    }}
+                                >
+                                    {#if style.animationType === 'glitch'}
+                                        <GlitchText
+                                            text={sub.content}
+                                            speed={style.animationSpeed}
+                                        />
+                                    {:else if style.animationType === 'split-text'}
+                                        <SplitText
+                                            text={sub.content}
+                                            duration={style.animationSpeed / 1000}
+                                            delay={(style.animationSpeed / 10) || 10}
+                                        />
+                                    {:else if style.animationType === 'typing'}
+                                        <TypingText
+                                            text={sub.content}
+                                            typingSpeed={style.animationSpeed}
+                                            loop={false}
+                                            showCursor={true}
+                                        />
+                                    {:else if style.animationType === 'decrypt'}
+                                        <DecriptText
+                                            text={sub.content}
+                                            speed={style.animationSpeed}
+                                            animateOn="view"
+                                            sequential={true}
+                                        />
+                                    {:else if style.animationType === 'pop-up'}
+                                        <PopUp
+                                            text={sub.content}
+                                            speed={style.animationSpeed}
+                                        />
+                                    {:else if style.animationType === 'bottom-to-top'}
+                                        <BottomToTop
+                                            text={sub.content}
+                                            speed={style.animationSpeed}
+                                        />
+                                    {:else if style.animationType === 'wave'}
+                                        <Wave
+                                            text={sub.content}
+                                            speed={style.animationSpeed}
+                                        />
+                                    {:else}
+                                        {sub.content}
+                                    {/if}
+                                    <span class="edit-hint"
+                                        >Double-click to edit text</span
+                                    >
+                                </div>
+                            {/if}
+
+                            <!-- Resize Handle in Bottom-Right Corner -->
+                            <!-- svelte-ignore a11y_no_static_element_interactions -->
+                            <div
+                                class="resize-handle"
+                                on:mousedown={(e) => startSubtitleResize(e, sub)}
+                            ></div>
+                        </div>
+                    {/each}
                 {:else}
                     <!-- Insert new subtitle at playhead if no segment is active -->
                     <button
@@ -963,6 +1011,11 @@
         box-shadow: 0 8px 36px rgba(0, 188, 212, 0.3);
     }
 
+    .subtitle-block.selected {
+        border: 1px solid #00bcd4 !important;
+        box-shadow: 0 0 0 2px rgba(0, 188, 212, 0.4), 0 8px 36px rgba(0, 188, 212, 0.2) !important;
+    }
+
     .subtitle-text-render {
         width: 100%;
         word-wrap: break-word;
@@ -1065,6 +1118,8 @@
     .size-controls-popover {
         position: absolute;
         bottom: 120%; /* Float right above the subtitle block */
+        left: 50%;
+        transform: translateX(-50%);
         background: rgba(20, 24, 35, 0.96);
         backdrop-filter: blur(16px);
         border: 1px solid rgba(255, 255, 255, 0.15);
