@@ -1,19 +1,19 @@
 <script lang="ts">
-    import { subtitleAnimation, selectedSubtitleIndices, subtitle, updateSubtitleProperties, pushUndoSnapshot, videoCurrentTime } from "../store.js";
+    import { tick } from "svelte";
+    import { subtitleAnimation, selectedSubtitleIndices, subtitle, updateSubtitleProperties, pushUndoSnapshot } from "../store.js";
 
     let animationType = "none";
     let animationSpeed = 200;
 
     let lastInspectedIndex = -2;
+    let suppressApply = false;
 
-    $: activeIndex = $subtitle.findIndex(
-        (sub) => $videoCurrentTime >= sub.start && $videoCurrentTime <= sub.end,
-    );
-
-    $: inspectedIndex = $selectedSubtitleIndices.length > 0 ? $selectedSubtitleIndices[0] : activeIndex;
+    $: hasSelection = $selectedSubtitleIndices.length > 0;
+    $: inspectedIndex = hasSelection ? $selectedSubtitleIndices[0] : -1;
 
     $: if (inspectedIndex !== lastInspectedIndex) {
         lastInspectedIndex = inspectedIndex;
+        suppressApply = true;
         if (inspectedIndex >= 0 && $subtitle[inspectedIndex]) {
             const sub = $subtitle[inspectedIndex];
             animationType = sub.animationType !== undefined ? sub.animationType : ($subtitleAnimation.animationType || "none");
@@ -22,16 +22,11 @@
             animationType = $subtitleAnimation.animationType || "none";
             animationSpeed = $subtitleAnimation.animationSpeed ?? 200;
         }
+        tick().then(() => { suppressApply = false; });
     }
 
     $: {
-        subtitleAnimation.update(store => ({
-            ...store,
-            animationType,
-            animationSpeed
-        }));
-
-        if ($selectedSubtitleIndices.length > 0) {
+        if (!suppressApply && hasSelection) {
             updateSubtitleProperties($selectedSubtitleIndices, {
                 animationType,
                 animationSpeed
@@ -47,6 +42,11 @@
         </h3>
     </div>
 
+    {#if !hasSelection}
+        <p class="selection-hint">Select a subtitle on the timeline or video to edit animations.</p>
+    {/if}
+
+    <div class="controls-body" class:disabled={!hasSelection}>
     <!-- Animation Type Select -->
     <div class="control-card">
         <div class="card-header">
@@ -99,6 +99,7 @@
             </div>
         </div>
     {/if}
+    </div>
 </div>
 
 <style>
@@ -256,5 +257,22 @@
     @keyframes fadeIn {
         from { opacity: 0; transform: translateY(4px); }
         to { opacity: 1; transform: translateY(0); }
+    }
+
+    .selection-hint {
+        margin: 0;
+        padding: 10px 12px;
+        font-size: 12px;
+        color: #94a3b8;
+        background: rgba(0, 188, 212, 0.08);
+        border: 1px solid rgba(0, 188, 212, 0.2);
+        border-radius: 8px;
+        line-height: 1.4;
+    }
+
+    .controls-body.disabled {
+        opacity: 0.45;
+        pointer-events: none;
+        user-select: none;
     }
 </style>

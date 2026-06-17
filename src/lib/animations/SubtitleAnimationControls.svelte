@@ -1,5 +1,6 @@
 <script lang="ts">
-    import { subtitleAnimation, selectedSubtitleIndices, subtitle, updateSubtitleProperties, pushUndoSnapshot, videoCurrentTime } from "../store.js";
+    import { tick } from "svelte";
+    import { subtitleAnimation, selectedSubtitleIndices, subtitle, updateSubtitleProperties, pushUndoSnapshot } from "../store.js";
     import ColorPicker from "../colorpicker/ColorPicker.svelte";
     import { invoke } from "@tauri-apps/api/core";
 
@@ -17,15 +18,14 @@
     let activePicker: "font" | "bg" | null = null;
 
     let lastInspectedIndex = -2;
+    let suppressApply = false;
 
-    $: activeIndex = $subtitle.findIndex(
-        (sub) => $videoCurrentTime >= sub.start && $videoCurrentTime <= sub.end,
-    );
-
-    $: inspectedIndex = $selectedSubtitleIndices.length > 0 ? $selectedSubtitleIndices[0] : activeIndex;
+    $: hasSelection = $selectedSubtitleIndices.length > 0;
+    $: inspectedIndex = hasSelection ? $selectedSubtitleIndices[0] : -1;
 
     $: if (inspectedIndex !== lastInspectedIndex) {
         lastInspectedIndex = inspectedIndex;
+        suppressApply = true;
         if (inspectedIndex >= 0 && $subtitle[inspectedIndex]) {
             const sub = $subtitle[inspectedIndex];
             fontSize = sub.fontSize !== undefined ? sub.fontSize : $subtitleAnimation.fontSize;
@@ -46,22 +46,12 @@
             backgroundOpacity = $subtitleAnimation.backgroundOpacity ?? 0.85;
             customFontName = customFontFile;
         }
+        tick().then(() => { suppressApply = false; });
     }
 
-    // Reactively update store when local values change
+    // Reactively update selected subtitle when local values change
     $: {
-        subtitleAnimation.update(store => ({
-            ...store,
-            fontSize,
-            fontColor,
-            backgroundColor,
-            customFont,
-            customFontFile,
-            fontOpacity,
-            backgroundOpacity
-        }));
-
-        if ($selectedSubtitleIndices.length > 0) {
+        if (!suppressApply && hasSelection) {
             updateSubtitleProperties($selectedSubtitleIndices, {
                 fontSize,
                 fontColor,
@@ -189,6 +179,11 @@
         </h3>
     </div>
 
+    {#if !hasSelection}
+        <p class="selection-hint">Select a subtitle on the timeline or video to edit styling.</p>
+    {/if}
+
+    <div class="controls-body" class:disabled={!hasSelection}>
     <!-- Font Size Section -->
     <div class="control-card">
         <div class="card-header">
@@ -352,6 +347,7 @@
                 Elegant Subtitle Preview
             </div>
         </div>
+    </div>
     </div>
 </div>
 
@@ -691,5 +687,22 @@
         min-width: 32px;
         text-align: center;
         border: 1px solid #323242;
+    }
+
+    .selection-hint {
+        margin: 0;
+        padding: 10px 12px;
+        font-size: 12px;
+        color: #94a3b8;
+        background: rgba(0, 188, 212, 0.08);
+        border: 1px solid rgba(0, 188, 212, 0.2);
+        border-radius: 8px;
+        line-height: 1.4;
+    }
+
+    .controls-body.disabled {
+        opacity: 0.45;
+        pointer-events: none;
+        user-select: none;
     }
 </style>

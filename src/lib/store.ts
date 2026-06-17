@@ -1,4 +1,5 @@
 import { get, writable } from "svelte/store";
+import type { VideoPreviewMetrics } from "./subtitleScale.js";
 
 const MAX_UNDO_HISTORY = 20;
 const SNAPSHOT_DEBOUNCE_MS = 400;
@@ -59,6 +60,13 @@ export function updateSubtitles(
 export const videoPath = writable("");
 export const videoDuration = writable(120); // Default timeline duration
 export const videoCurrentTime = writable(0);
+
+export const videoPreviewMetrics = writable<VideoPreviewMetrics>({
+    videoWidth: 0,
+    videoHeight: 0,
+    containerWidth: 0,
+    containerHeight: 0,
+});
 
 //for subtitle
 export interface Subtitle {

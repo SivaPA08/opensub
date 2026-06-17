@@ -206,7 +206,7 @@
                 )};
                     font-family: {sub.customFont ||
                     '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'};
-                    font-size: {sub.fontSize * scaleFactor}px;
+                    font-size: {sub.fontSize}px;
                     color: {hexOrRgbToRgba(sub.fontColor, sub.fontOpacity)};
                     padding: {10 * scaleFactor}px {24 * scaleFactor}px;
                     border-radius: {8 * scaleFactor}px;
@@ -237,7 +237,7 @@
                     <div
                         class="subtitle-text-render"
                         style="
-                            font-size: {sub.fontSize * scaleFactor}px; 
+                            font-size: {sub.fontSize}px; 
                             color: {hexOrRgbToRgba(
                             sub.fontColor,
                             sub.fontOpacity,
