@@ -6,6 +6,7 @@
     import DecriptText from "$lib/animations/DecriptText.svelte";
     import PopUp from "$lib/animations/PopUp.svelte";
     import BottomToTop from "$lib/animations/BottomToTop.svelte";
+    import Wave from "$lib/animations/Wave.svelte";
 
     type RenderSubtitle = {
         content: string;
@@ -279,6 +280,12 @@
                             />
                         {:else if sub.animationType === "bottom-to-top"}
                             <BottomToTop
+                                text={sub.content}
+                                speed={sub.animationSpeed}
+                                timeOffset={sub.timeOffset}
+                            />
+                        {:else if sub.animationType === "wave"}
+                            <Wave
                                 text={sub.content}
                                 speed={sub.animationSpeed}
                                 timeOffset={sub.timeOffset}

@@ -27,6 +27,7 @@
     import DecriptText from "../animations/DecriptText.svelte";
     import PopUp from "../animations/PopUp.svelte";
     import BottomToTop from "../animations/BottomToTop.svelte";
+    import Wave from "../animations/Wave.svelte";
 
     let videoElement: HTMLVideoElement;
     let videoSrc = "";
@@ -738,6 +739,11 @@
                                     />
                                 {:else if activeAnimationType === 'bottom-to-top'}
                                     <BottomToTop
+                                        text={activeSubtitle.content}
+                                        speed={activeAnimationSpeed}
+                                    />
+                                {:else if activeAnimationType === 'wave'}
+                                    <Wave
                                         text={activeSubtitle.content}
                                         speed={activeAnimationSpeed}
                                     />
