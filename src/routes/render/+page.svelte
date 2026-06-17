@@ -5,6 +5,7 @@
     import TypingText from "$lib/animations/TypingText.svelte";
     import DecriptText from "$lib/animations/DecriptText.svelte";
     import PopUp from "$lib/animations/PopUp.svelte";
+    import BottomToTop from "$lib/animations/BottomToTop.svelte";
 
     type RenderSubtitle = {
         content: string;
@@ -272,6 +273,12 @@
                             />
                         {:else if sub.animationType === "pop-up"}
                             <PopUp
+                                text={sub.content}
+                                speed={sub.animationSpeed}
+                                timeOffset={sub.timeOffset}
+                            />
+                        {:else if sub.animationType === "bottom-to-top"}
+                            <BottomToTop
                                 text={sub.content}
                                 speed={sub.animationSpeed}
                                 timeOffset={sub.timeOffset}

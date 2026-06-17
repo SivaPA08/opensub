@@ -26,6 +26,7 @@
     import TypingText from "../animations/TypingText.svelte";
     import DecriptText from "../animations/DecriptText.svelte";
     import PopUp from "../animations/PopUp.svelte";
+    import BottomToTop from "../animations/BottomToTop.svelte";
 
     let videoElement: HTMLVideoElement;
     let videoSrc = "";
@@ -732,6 +733,11 @@
                                     />
                                 {:else if activeAnimationType === 'pop-up'}
                                     <PopUp
+                                        text={activeSubtitle.content}
+                                        speed={activeAnimationSpeed}
+                                    />
+                                {:else if activeAnimationType === 'bottom-to-top'}
+                                    <BottomToTop
                                         text={activeSubtitle.content}
                                         speed={activeAnimationSpeed}
                                     />

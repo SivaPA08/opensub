@@ -61,6 +61,7 @@
             >
                 <option value="none">None (Static)</option>
                 <option value="pop-up">Pop Up</option>
+                <option value="bottom-to-top">Bottom To Top</option>
                 <option value="scale-in">Scale In</option>
                 <option value="glitch">Glitch Text</option>
                 <option value="split-text">Split Text</option>
