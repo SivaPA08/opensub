@@ -1,6 +1,8 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import { videoDuration, videoCurrentTime, subtitle, selectedSubtitleIndices, updateSubtitleProperties, pushUndoSnapshot, setSubtitles } from "../store.js";
+    import { get } from "svelte/store";
+    import { videoDuration, videoCurrentTime, subtitle, selectedSubtitleIndices, updateSubtitleProperties, pushUndoSnapshot, setSubtitles, updateSubtitles } from "../store.js";
+    import type { Subtitle } from "../store.js";
 
     type Clip = {
         id: number;
@@ -87,12 +89,12 @@
     // Sync from $subtitle store to local clips
     let lastSubtitlesKey = "";
     $: {
-        const currentKey = $subtitle.map(s => `${s.start}-${s.end}-${s.content}`).join('|');
+        const currentKey = $subtitle.map(s => `${s.start}-${s.end}-${s.content}-${s.track ?? 0}`).join('|');
         if (currentKey !== lastSubtitlesKey && !drag && !resize) {
             lastSubtitlesKey = currentKey;
             clips = $subtitle.map((sub, index) => ({
                 id: index + 1,
-                track: 0, // Subtitles on track 1 (index 0)
+                track: sub.track !== undefined ? sub.track : 0,
                 start: sub.start,
                 length: sub.end - sub.start,
                 color: "#6b63d9", // Beautiful deep purple for subtitles
@@ -105,17 +107,18 @@
     $: if (clips && (drag || resize)) {
         const updated = clips.map((clip, index) => {
             // Keep original properties and update positioning
-            const original = $subtitle[index] || {};
+            const original = get(subtitle)[index] || {};
             return {
                 ...original,
                 start: clip.start,
                 end: clip.start + clip.length,
-                content: clip.title
+                content: clip.title,
+                track: clip.track
             };
         });
         setSubtitles(updated, { recordUndo: false });
         // Sync our serialization key so we avoid triggering the store-to-clips reactive block
-        lastSubtitlesKey = updated.map(s => `${s.start}-${s.end}-${s.content}`).join('|');
+        lastSubtitlesKey = updated.map(s => `${s.start}-${s.end}-${s.content}-${s.track ?? 0}`).join('|');
     }
 
     let drag: DragState = null;
@@ -162,6 +165,7 @@
         window.addEventListener("keydown", handleKeyDown);
         return () => {
             window.removeEventListener("keydown", handleKeyDown);
+            window.removeEventListener("click", closeContextMenu);
         };
     });
 
@@ -443,6 +447,51 @@
         const ms = Math.floor((seconds % 1) * 10).toString();
         return `${m}:${s}.${ms}`;
     }
+
+    let contextMenu = {
+        show: false,
+        x: 0,
+        y: 0,
+        track: 0,
+    };
+
+    function handleContextMenu(e: MouseEvent, trackIndex = 0) {
+        e.preventDefault();
+        e.stopPropagation();
+        contextMenu = {
+            show: true,
+            x: e.clientX,
+            y: e.clientY,
+            track: trackIndex
+        };
+        window.addEventListener("click", closeContextMenu);
+    }
+
+    function closeContextMenu() {
+        contextMenu.show = false;
+        window.removeEventListener("click", closeContextMenu);
+    }
+
+    function addSubtitleAtPlayhead() {
+        const currentTime = $videoCurrentTime;
+        const duration = $videoDuration || 120;
+        const end = Math.min(duration, currentTime + 2.0);
+
+        const newSub: Subtitle = {
+            start: parseFloat(currentTime.toFixed(3)),
+            end: parseFloat(end.toFixed(3)),
+            content: "New Subtitle segment",
+            track: contextMenu.track,
+        };
+
+        pushUndoSnapshot(true);
+        updateSubtitles((items) => {
+            const updated = [...items, newSub];
+            return updated.sort((a, b) => a.start - b.start);
+        }, { recordUndo: false });
+
+        closeContextMenu();
+    }
 </script>
 
 <div class="timeline">
@@ -484,7 +533,7 @@
     </div>
 
     <!-- svelte-ignore a11y_no_static_element_interactions -->
-    <div class="tracks" bind:this={tracksRef} on:mousedown={startBoxSelection}>
+    <div class="tracks" bind:this={tracksRef} on:mousedown={startBoxSelection} on:contextmenu|preventDefault={handleContextMenu}>
         <div class="tracks-inner" style="width: {timelineDuration * zoom + 120}px;">
             <!-- Selection Box Overlay -->
             {#if isBoxSelecting}
@@ -523,7 +572,8 @@
             {/if}
 
             {#each tracks as track}
-                <div class="track">
+                <!-- svelte-ignore a11y_no_static_element_interactions -->
+                <div class="track" on:contextmenu|preventDefault|stopPropagation={(e) => handleContextMenu(e, track)}>
                     <div class="label">
                         Track {track + 1}
                     </div>
@@ -580,6 +630,25 @@
     </div>
 
 </div>
+
+{#if contextMenu.show}
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <div
+        class="context-menu"
+        style="position: fixed; left: {contextMenu.x}px; top: {contextMenu.y}px; z-index: 9999;"
+        on:click|stopPropagation
+    >
+        <button on:click={addSubtitleAtPlayhead}>
+            <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="10"></circle>
+                <line x1="12" y1="8" x2="12" y2="16"></line>
+                <line x1="8" y1="12" x2="16" y2="12"></line>
+            </svg>
+            Add Subtitle
+        </button>
+    </div>
+{/if}
 
 <style>
     .timeline {
@@ -999,5 +1068,55 @@
 
     .select-all-btn:active {
         transform: scale(0.95);
+    }
+
+    /* Floating Context Menu */
+    .context-menu {
+        background: rgba(20, 24, 35, 0.95);
+        backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.15);
+        border-radius: 8px;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        padding: 4px;
+        min-width: 200px;
+        animation: menuFadeIn 0.15s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    .context-menu button {
+        width: 100%;
+        background: transparent;
+        border: none;
+        color: #e2e8f0;
+        padding: 10px 14px;
+        text-align: left;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        border-radius: 6px;
+        transition: background-color 0.15s, color 0.15s;
+    }
+
+    .context-menu button:hover {
+        background: rgba(0, 188, 212, 0.15);
+        color: #00bcd4;
+    }
+
+    .context-menu button .icon {
+        width: 16px;
+        height: 16px;
+    }
+
+    @keyframes menuFadeIn {
+        from {
+            opacity: 0;
+            transform: scale(0.95) translateY(-4px);
+        }
+        to {
+            opacity: 1;
+            transform: scale(1) translateY(0);
+        }
     }
 </style>

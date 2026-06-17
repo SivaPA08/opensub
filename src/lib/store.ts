@@ -85,6 +85,7 @@ export interface Subtitle {
     backgroundOpacity?: number;
     animationType?: string;
     animationSpeed?: number;
+    track?: number;
 }
 export const subtitle = writable<Subtitle[]>([]);
 export const selectedSubtitleIndices = writable<number[]>([]);

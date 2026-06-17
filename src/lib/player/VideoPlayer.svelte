@@ -285,27 +285,6 @@
         window.removeEventListener("mouseup", stopSubtitleResize);
     }
 
-    function addSubtitleAtPlayhead() {
-        const currentTime = $videoCurrentTime;
-        const duration = $videoDuration || 120;
-        const end = Math.min(duration, currentTime + 2.0);
-
-        const newSub: Subtitle = {
-            start: parseFloat(currentTime.toFixed(3)),
-            end: parseFloat(end.toFixed(3)),
-            content: "New Subtitle segment",
-        };
-
-        pushUndoSnapshot(true);
-        updateSubtitles((items) => {
-            const updated = [...items, newSub];
-            return updated.sort((a, b) => a.start - b.start);
-        }, { recordUndo: false });
-
-        // Instantly focus and open editing interface
-        textEditUndoRecorded = false;
-        isEditingText = true;
-    }
 
     function handleSubtitleClick(e: MouseEvent, sub: Subtitle) {
         if (activeSubtitle === sub) {
@@ -611,7 +590,7 @@
             <!-- Subtitle Overlay -->
             <div class="subtitle-overlay">
                 {#if activeSubtitles.length > 0}
-                    {#each activeSubtitles as sub (sub)}
+                    {#each activeSubtitles as sub (sub.start + '_' + sub.end)}
                         {@const style = getSubStyle(sub)}
                         <!-- Floating Popover Controls -->
                         {#if showSizeControls && activeSubtitle === sub}
@@ -809,14 +788,6 @@
                             ></div>
                         </div>
                     {/each}
-                {:else}
-                    <!-- Insert new subtitle at playhead if no segment is active -->
-                    <button
-                        class="add-subtitle-btn animate-fade-in"
-                        on:click|stopPropagation={addSubtitleAtPlayhead}
-                    >
-                        <span class="plus-icon">+</span> Add Subtitle
-                    </button>
                 {/if}
             </div>
 
@@ -1073,46 +1044,6 @@
         opacity: 1;
     }
 
-    /* Insert new subtitle floating CTA button */
-    .add-subtitle-btn {
-        position: absolute;
-        bottom: 12%;
-        left: 50%;
-        transform: translateX(-50%);
-        pointer-events: auto;
-        background: rgba(0, 188, 212, 0.85);
-        backdrop-filter: blur(4px);
-        border: 1px solid #00bcd4;
-        color: white;
-        padding: 8px 18px;
-        border-radius: 20px;
-        font-size: 12px;
-        font-weight: 600;
-        cursor: pointer;
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        box-shadow: 0 4px 16px rgba(0, 188, 212, 0.4);
-        transition:
-            background 0.15s,
-            transform 0.15s,
-            box-shadow 0.15s;
-    }
-
-    .add-subtitle-btn:hover {
-        background: #00bcd4;
-        transform: translateX(-50%) translateY(-1px);
-        box-shadow: 0 6px 20px rgba(0, 188, 212, 0.5);
-    }
-
-    .add-subtitle-btn:active {
-        transform: translateX(-50%) translateY(0);
-    }
-
-    .plus-icon {
-        font-size: 14px;
-        font-weight: 700;
-    }
 
     /* Popover Controls */
     .size-controls-popover {
