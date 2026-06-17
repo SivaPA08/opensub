@@ -70,17 +70,21 @@
         const h = gradientCanvas.height;
         ctx.clearRect(0, 0, w, h);
 
-        // White → hue color (horizontal)
+        // Hue background
+        ctx.fillStyle = hueToHex(hue);
+        ctx.fillRect(0, 0, w, h);
+
+        // White → transparent (horizontal)
         const hGrad = ctx.createLinearGradient(0, 0, w, 0);
         hGrad.addColorStop(0, "#fff");
-        hGrad.addColorStop(1, hueToHex(hue));
+        hGrad.addColorStop(1, "rgba(255,255,255,0)");
         ctx.fillStyle = hGrad;
         ctx.fillRect(0, 0, w, h);
 
         // Transparent → black (vertical)
         const vGrad = ctx.createLinearGradient(0, 0, 0, h);
         vGrad.addColorStop(0, "rgba(0,0,0,0)");
-        vGrad.addColorStop(1, "rgba(0,0,0,1)");
+        vGrad.addColorStop(1, "#000");
         ctx.fillStyle = vGrad;
         ctx.fillRect(0, 0, w, h);
     }
@@ -117,11 +121,11 @@
             }
         }
 
-        // Color gradient overlay
+        // Color gradient overlay (vertical)
         const [r, g, b] = hsvToRgb(hue, saturation, brightness);
-        const grad = ctx.createLinearGradient(0, 0, w, 0);
-        grad.addColorStop(0, `rgba(${r},${g},${b},0)`);
-        grad.addColorStop(1, `rgba(${r},${g},${b},1)`);
+        const grad = ctx.createLinearGradient(0, 0, 0, h);
+        grad.addColorStop(0, `rgba(${r},${g},${b},1)`);
+        grad.addColorStop(1, `rgba(${r},${g},${b},0)`);
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, w, h);
     }
@@ -150,8 +154,8 @@
     }
 
     function handleAlphaInteraction(e: MouseEvent | TouchEvent) {
-        const { x, w } = getRelativePos(e, alphaEl);
-        alpha = parseFloat((x / w).toFixed(2));
+        const { y, h } = getRelativePos(e, alphaEl);
+        alpha = parseFloat((1 - y / h).toFixed(2));
     }
 
     // ── Global mouse/touch move + up ──────────────────────────────────────────
@@ -401,6 +405,7 @@
         display: flex;
         gap: 8px;
         padding: 8px;
+        height: 200px;
     }
 
     /* Gradient */
