@@ -1,8 +1,8 @@
 [package]
 name = "opensub"
 version = "0.1.0"
-description = "A Tauri App"
-authors = ["you"]
+description = "Animated subtitles creater"
+authors = ["Siva Prasad A"]
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
