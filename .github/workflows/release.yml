@@ -19,11 +19,21 @@ jobs:
         uses: actions/github-script@v7
         with:
           script: |
+
+            // context.ref_name is unavailable in github-script; derive from context.ref instead
+
+
+            const tag = context.ref.replace('refs/tags/', '');
+
             const { data } = await github.rest.repos.createRelease({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              tag_name: context.ref_name,
-              name: `OpenSub ${context.ref_name}`,
+
+              tag_name: tag,
+
+
+              name: `OpenSub ${tag}`,
+
               draft: false,
               prerelease: false,
             });
@@ -76,9 +86,6 @@ jobs:
         if: matrix.platform == 'macos-latest'
         shell: bash
         run: |
-          # Apple Silicon requires macOS 11+. Setting 11.0 lets std::filesystem
-          # (fs::path) compile without "unavailable: introduced in macOS 10.15" errors.
-          # Both vars are set here AND in .cargo/config.toml for double coverage.
           echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> "$GITHUB_ENV"
           echo "CMAKE_OSX_DEPLOYMENT_TARGET=11.0" >> "$GITHUB_ENV"
           echo "CFLAGS=-march=armv8.5-a" >> "$GITHUB_ENV"
