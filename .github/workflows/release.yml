@@ -1,0 +1,96 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    permissions:
+      contents: write
+
+    strategy:
+      fail-fast: false
+
+      matrix:
+        include:
+          - platform: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-24.04'
+        run: |
+          sudo apt update
+
+          sudo apt install -y \
+            ffmpeg \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Install Windows FFmpeg
+        if: matrix.platform == 'windows-latest'
+        run: choco install ffmpeg -y
+
+      - name: Install macOS FFmpeg
+        if: matrix.platform == 'macos-latest'
+        run: brew install ffmpeg
+
+      - name: Prepare sidecars
+        shell: bash
+        run: |
+          mkdir -p src-tauri/binaries
+
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            cp $(which ffmpeg) src-tauri/binaries/ffmpeg-${{ matrix.target }}
+            cp $(which ffprobe) src-tauri/binaries/ffprobe-${{ matrix.target }}
+          fi
+
+          if [[ "${{ runner.os }}" == "macOS" ]]; then
+            cp $(which ffmpeg) src-tauri/binaries/ffmpeg-${{ matrix.target }}
+            cp $(which ffprobe) src-tauri/binaries/ffprobe-${{ matrix.target }}
+          fi
+
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            cp "/c/ProgramData/chocolatey/bin/ffmpeg.exe" \
+              src-tauri/binaries/ffmpeg-${{ matrix.target }}.exe
+
+            cp "/c/ProgramData/chocolatey/bin/ffprobe.exe" \
+              src-tauri/binaries/ffprobe-${{ matrix.target }}.exe
+          fi
+
+          chmod +x src-tauri/binaries/* || true
+
+      - run: npm ci
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'OpenSub ${{ github.ref_name }}'
+          releaseDraft: false
+          prerelease: false
+          args: --target ${{ matrix.target }}

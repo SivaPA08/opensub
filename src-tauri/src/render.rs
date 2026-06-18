@@ -107,8 +107,50 @@ struct RenderState {
     customFontName: Option<String>,
 }
 
+pub fn get_ffmpeg_command() -> Result<Command, String> {
+    #[cfg(debug_assertions)]
+    {
+        Ok(Command::new("ffmpeg"))
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        let app_dir = std::env::current_exe()
+            .map_err(|e| format!("Failed to get current executable path: {e}"))?
+            .parent()
+            .ok_or_else(|| "Failed to get parent directory of executable".to_string())?
+            .to_path_buf();
+        
+        let target_triple = env!("TARGET_TRIPLE");
+        let ext = if cfg!(target_os = "windows") { ".exe" } else { "" };
+        let sidecar_name = format!("ffmpeg-{}{}", target_triple, ext);
+        let path = app_dir.join(&sidecar_name);
+        Ok(Command::new(path))
+    }
+}
+
+pub fn get_ffprobe_command() -> Result<Command, String> {
+    #[cfg(debug_assertions)]
+    {
+        Ok(Command::new("ffprobe"))
+    }
+    #[cfg(not(debug_assertions))]
+    {
+        let app_dir = std::env::current_exe()
+            .map_err(|e| format!("Failed to get current executable path: {e}"))?
+            .parent()
+            .ok_or_else(|| "Failed to get parent directory of executable".to_string())?
+            .to_path_buf();
+        
+        let target_triple = env!("TARGET_TRIPLE");
+        let ext = if cfg!(target_os = "windows") { ".exe" } else { "" };
+        let sidecar_name = format!("ffprobe-{}{}", target_triple, ext);
+        let path = app_dir.join(&sidecar_name);
+        Ok(Command::new(path))
+    }
+}
+
 fn ffprobe_info(path: &str) -> Result<(u32, u32, f32, f32), String> {
-    let out = Command::new("ffprobe")
+    let out = get_ffprobe_command()?
         .args([
             "-v",
             "quiet",
@@ -382,7 +424,7 @@ fn render_video(app: &AppHandle, config: RenderConfig) -> Result<PyResponse, Str
         thread::sleep(Duration::from_millis(50));
     }
 
-    let mut ffmpeg = Command::new("ffmpeg")
+    let mut ffmpeg = get_ffmpeg_command()?
         .args([
             "-y",
             "-i",

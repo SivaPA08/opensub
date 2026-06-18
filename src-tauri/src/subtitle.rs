@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{Read, Write};
 
-use std::process::Command;
+
 use tauri::{AppHandle, Emitter, Manager};
 use whisper_rs::{
     convert_integer_to_float_audio, FullParams, SamplingStrategy, WhisperContext,
@@ -35,8 +35,10 @@ pub struct DownloadProgressPayload {
     pub progress: f64,
 }
 
+use crate::render::{get_ffmpeg_command, get_ffprobe_command};
+
 fn ffprobe_duration(filepath: &str) -> Result<f32, String> {
-    let output = Command::new("ffprobe")
+    let output = get_ffprobe_command()?
         .args([
             "-v",
             "quiet",
@@ -201,7 +203,7 @@ fn transcribe_words(
 
     let wav_path = {
         let tmp = std::env::temp_dir().join("opensub_audio.wav");
-        let status = Command::new("ffmpeg")
+        let status = get_ffmpeg_command()?
             .args([
                 "-y",
                 "-i",
