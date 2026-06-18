@@ -16,8 +16,8 @@ jobs:
         include:
           - platform: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
-            ffmpeg_asset: ffmpeg-linux-x64
-            ffprobe_asset: ffprobe-linux-x64
+            ffmpeg_asset: ffmpeg-linux-x64.gz
+            ffprobe_asset: ffprobe-linux-x64.gz
 
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
@@ -37,6 +37,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
       - uses: dtolnay/rust-toolchain@stable
 
@@ -52,25 +53,42 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
 
+      - name: Fix whisper.cpp i8mm issue on macOS
+        if: matrix.platform == 'macos-latest'
+        shell: bash
+        run: |
+          echo "CFLAGS=-march=armv8.5-a" >> "$GITHUB_ENV"
+          echo "CXXFLAGS=-march=armv8.5-a" >> "$GITHUB_ENV"
+          echo "GGML_NATIVE=OFF" >> "$GITHUB_ENV"
+          echo "GGML_CPU_ALL_VARIANTS=OFF" >> "$GITHUB_ENV"
+
       - name: Download FFmpeg sidecars
         shell: bash
         run: |
           set -euo pipefail
 
           mkdir -p src-tauri/binaries
-
           BASE_URL="https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1"
 
-          if [[ "${{ runner.os }}" == "Windows" ]]; then
-            curl -L "${BASE_URL}/${{ matrix.ffmpeg_asset }}" -o "src-tauri/binaries/ffmpeg-${{ matrix.target }}.exe"
-            curl -L "${BASE_URL}/${{ matrix.ffprobe_asset }}" -o "src-tauri/binaries/ffprobe-${{ matrix.target }}.exe"
-          else
-            curl -L "${BASE_URL}/${{ matrix.ffmpeg_asset }}" -o "src-tauri/binaries/ffmpeg-${{ matrix.target }}"
-            curl -L "${BASE_URL}/${{ matrix.ffprobe_asset }}" -o "src-tauri/binaries/ffprobe-${{ matrix.target }}"
+          if [[ "${{ runner.os }}" == "Linux" ]]; then
+            curl -L --fail "$BASE_URL/${{ matrix.ffmpeg_asset }}" -o "src-tauri/binaries/ffmpeg-${{ matrix.target }}.gz"
+            curl -L --fail "$BASE_URL/${{ matrix.ffprobe_asset }}" -o "src-tauri/binaries/ffprobe-${{ matrix.target }}.gz"
+
+            gunzip -f "src-tauri/binaries/ffmpeg-${{ matrix.target }}.gz"
+            gunzip -f "src-tauri/binaries/ffprobe-${{ matrix.target }}.gz"
             chmod +x "src-tauri/binaries/ffmpeg-${{ matrix.target }}" "src-tauri/binaries/ffprobe-${{ matrix.target }}"
+
+          elif [[ "${{ runner.os }}" == "macOS" ]]; then
+            curl -L --fail "$BASE_URL/${{ matrix.ffmpeg_asset }}" -o "src-tauri/binaries/ffmpeg-${{ matrix.target }}"
+            curl -L --fail "$BASE_URL/${{ matrix.ffprobe_asset }}" -o "src-tauri/binaries/ffprobe-${{ matrix.target }}"
+            chmod +x "src-tauri/binaries/ffmpeg-${{ matrix.target }}" "src-tauri/binaries/ffprobe-${{ matrix.target }}"
+
+          elif [[ "${{ runner.os }}" == "Windows" ]]; then
+            curl -L --fail "$BASE_URL/${{ matrix.ffmpeg_asset }}" -o "src-tauri/binaries/ffmpeg-${{ matrix.target }}.exe"
+            curl -L --fail "$BASE_URL/${{ matrix.ffprobe_asset }}" -o "src-tauri/binaries/ffprobe-${{ matrix.target }}.exe"
           fi
 
-          echo "Sidecars prepared:"
+          echo "Prepared sidecars:"
           ls -la src-tauri/binaries
 
       - run: npm ci
