@@ -1,7 +1,14 @@
-# Tauri + SvelteKit + TypeScript
+# OpenSub
 
-This template should help get you started developing with Tauri, SvelteKit and TypeScript in Vite.
+An open-source desktop application for creating animated subtitles.
 
-## Recommended IDE Setup
+## Installation
 
-[VS Code](https://code.visualstudio.com/) + [Svelte](https://marketplace.visualstudio.com/items?itemName=svelte.svelte-vscode) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer).
+### Build from source
+
+```bash
+git clone https://github.com/SivaPA08/opensub.git
+cd opensub
+
+cargo tauri build
+```
