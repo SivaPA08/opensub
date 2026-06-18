@@ -12,17 +12,22 @@ jobs:
 
     strategy:
       fail-fast: false
-
       matrix:
         include:
           - platform: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
+            ffmpeg_asset: ffmpeg-linux-x64
+            ffprobe_asset: ffprobe-linux-x64
 
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
+            ffmpeg_asset: ffmpeg-win32-x64
+            ffprobe_asset: ffprobe-win32-x64
 
           - platform: macos-latest
             target: aarch64-apple-darwin
+            ffmpeg_asset: ffmpeg-darwin-arm64
+            ffprobe_asset: ffprobe-darwin-arm64
 
     runs-on: ${{ matrix.platform }}
 
@@ -39,9 +44,7 @@ jobs:
         if: matrix.platform == 'ubuntu-24.04'
         run: |
           sudo apt update
-
           sudo apt install -y \
-            ffmpeg \
             libwebkit2gtk-4.1-dev \
             build-essential \
             libssl-dev \
@@ -49,45 +52,32 @@ jobs:
             libayatana-appindicator3-dev \
             librsvg2-dev
 
-      - name: Install Windows FFmpeg
-        if: matrix.platform == 'windows-latest'
-        run: choco install ffmpeg -y
-
-      - name: Install macOS FFmpeg
-        if: matrix.platform == 'macos-latest'
-        run: brew install ffmpeg
-
-      - name: Prepare sidecars
+      - name: Download FFmpeg sidecars
         shell: bash
         run: |
+          set -euo pipefail
+
           mkdir -p src-tauri/binaries
 
-          if [[ "${{ runner.os }}" == "Linux" ]]; then
-            cp $(which ffmpeg) src-tauri/binaries/ffmpeg-${{ matrix.target }}
-            cp $(which ffprobe) src-tauri/binaries/ffprobe-${{ matrix.target }}
-          fi
-
-          if [[ "${{ runner.os }}" == "macOS" ]]; then
-            cp $(which ffmpeg) src-tauri/binaries/ffmpeg-${{ matrix.target }}
-            cp $(which ffprobe) src-tauri/binaries/ffprobe-${{ matrix.target }}
-          fi
+          BASE_URL="https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1"
 
           if [[ "${{ runner.os }}" == "Windows" ]]; then
-            cp "/c/ProgramData/chocolatey/bin/ffmpeg.exe" \
-              src-tauri/binaries/ffmpeg-${{ matrix.target }}.exe
-
-            cp "/c/ProgramData/chocolatey/bin/ffprobe.exe" \
-              src-tauri/binaries/ffprobe-${{ matrix.target }}.exe
+            curl -L "${BASE_URL}/${{ matrix.ffmpeg_asset }}" -o "src-tauri/binaries/ffmpeg-${{ matrix.target }}.exe"
+            curl -L "${BASE_URL}/${{ matrix.ffprobe_asset }}" -o "src-tauri/binaries/ffprobe-${{ matrix.target }}.exe"
+          else
+            curl -L "${BASE_URL}/${{ matrix.ffmpeg_asset }}" -o "src-tauri/binaries/ffmpeg-${{ matrix.target }}"
+            curl -L "${BASE_URL}/${{ matrix.ffprobe_asset }}" -o "src-tauri/binaries/ffprobe-${{ matrix.target }}"
+            chmod +x "src-tauri/binaries/ffmpeg-${{ matrix.target }}" "src-tauri/binaries/ffprobe-${{ matrix.target }}"
           fi
 
-          chmod +x src-tauri/binaries/* || true
+          echo "Sidecars prepared:"
+          ls -la src-tauri/binaries
 
       - run: npm ci
 
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
         with:
           tagName: ${{ github.ref_name }}
           releaseName: 'OpenSub ${{ github.ref_name }}'
