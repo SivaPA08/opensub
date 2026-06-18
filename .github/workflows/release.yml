@@ -3,8 +3,35 @@ on:
   push:
     tags:
       - 'v*'
+
 jobs:
-  release:
+    # ── 1. Create the GitHub release once, before any build job runs ──
+  create-release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-24.04
+    outputs:
+      release_id: ${{ steps.create-release.outputs.result }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Create release
+        id: create-release
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: context.ref_name,
+              name: `OpenSub ${context.ref_name}`,
+              draft: false,
+              prerelease: false,
+            });
+            return data.id;
+
+    # ── 2. Build on each platform and upload to the existing release ──
+  build:
+    needs: create-release
     permissions:
       contents: write
     strategy:
@@ -31,6 +58,9 @@ jobs:
           node-version: 22
           cache: npm
       - uses: dtolnay/rust-toolchain@stable
+      - name: Add Rust target (macOS cross-compile)
+        if: matrix.platform == 'macos-latest'
+        run: rustup target add aarch64-apple-darwin
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-24.04'
         run: |
@@ -46,10 +76,11 @@ jobs:
         if: matrix.platform == 'macos-latest'
         shell: bash
         run: |
-          # Apple Silicon only exists on macOS 11+; set 11.0 as the floor.
-          # This allows std::filesystem (fs::path) used by ggml/whisper.cpp
-          # to compile without "unavailable: introduced in macOS 10.15" errors.
+          # Apple Silicon requires macOS 11+. Setting 11.0 lets std::filesystem
+          # (fs::path) compile without "unavailable: introduced in macOS 10.15" errors.
+          # Both vars are set here AND in .cargo/config.toml for double coverage.
           echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> "$GITHUB_ENV"
+          echo "CMAKE_OSX_DEPLOYMENT_TARGET=11.0" >> "$GITHUB_ENV"
           echo "CFLAGS=-march=armv8.5-a" >> "$GITHUB_ENV"
           echo "CXXFLAGS=-march=armv8.5-a" >> "$GITHUB_ENV"
           echo "GGML_NATIVE=OFF" >> "$GITHUB_ENV"
@@ -81,8 +112,5 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'OpenSub ${{ github.ref_name }}'
-          releaseDraft: false
-          prerelease: false
+          releaseId: ${{ needs.create-release.outputs.release_id }}
           args: --target ${{ matrix.target }}
