@@ -1,15 +1,12 @@
 name: Release
-
 on:
   push:
     tags:
       - 'v*'
-
 jobs:
   release:
     permissions:
       contents: write
-
     strategy:
       fail-fast: false
       matrix:
@@ -18,29 +15,22 @@ jobs:
             target: x86_64-unknown-linux-gnu
             ffmpeg_asset: ffmpeg-linux-x64.gz
             ffprobe_asset: ffprobe-linux-x64.gz
-
           - platform: windows-latest
             target: x86_64-pc-windows-msvc
             ffmpeg_asset: ffmpeg-win32-x64
             ffprobe_asset: ffprobe-win32-x64
-
           - platform: macos-latest
             target: aarch64-apple-darwin
             ffmpeg_asset: ffmpeg-darwin-arm64
             ffprobe_asset: ffprobe-darwin-arm64
-
     runs-on: ${{ matrix.platform }}
-
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
       - uses: dtolnay/rust-toolchain@stable
-
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-24.04'
         run: |
@@ -52,47 +42,41 @@ jobs:
             libgtk-3-dev \
             libayatana-appindicator3-dev \
             librsvg2-dev
-
-      - name: Fix whisper.cpp i8mm issue on macOS
+      - name: Configure macOS build environment
         if: matrix.platform == 'macos-latest'
         shell: bash
         run: |
+          # Apple Silicon only exists on macOS 11+; set 11.0 as the floor.
+          # This allows std::filesystem (fs::path) used by ggml/whisper.cpp
+          # to compile without "unavailable: introduced in macOS 10.15" errors.
+          echo "MACOSX_DEPLOYMENT_TARGET=11.0" >> "$GITHUB_ENV"
           echo "CFLAGS=-march=armv8.5-a" >> "$GITHUB_ENV"
           echo "CXXFLAGS=-march=armv8.5-a" >> "$GITHUB_ENV"
           echo "GGML_NATIVE=OFF" >> "$GITHUB_ENV"
           echo "GGML_CPU_ALL_VARIANTS=OFF" >> "$GITHUB_ENV"
-
       - name: Download FFmpeg sidecars
         shell: bash
         run: |
           set -euo pipefail
-
           mkdir -p src-tauri/binaries
           BASE_URL="https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1"
-
           if [[ "${{ runner.os }}" == "Linux" ]]; then
             curl -L --fail "$BASE_URL/${{ matrix.ffmpeg_asset }}" -o "src-tauri/binaries/ffmpeg-${{ matrix.target }}.gz"
             curl -L --fail "$BASE_URL/${{ matrix.ffprobe_asset }}" -o "src-tauri/binaries/ffprobe-${{ matrix.target }}.gz"
-
             gunzip -f "src-tauri/binaries/ffmpeg-${{ matrix.target }}.gz"
             gunzip -f "src-tauri/binaries/ffprobe-${{ matrix.target }}.gz"
             chmod +x "src-tauri/binaries/ffmpeg-${{ matrix.target }}" "src-tauri/binaries/ffprobe-${{ matrix.target }}"
-
           elif [[ "${{ runner.os }}" == "macOS" ]]; then
             curl -L --fail "$BASE_URL/${{ matrix.ffmpeg_asset }}" -o "src-tauri/binaries/ffmpeg-${{ matrix.target }}"
             curl -L --fail "$BASE_URL/${{ matrix.ffprobe_asset }}" -o "src-tauri/binaries/ffprobe-${{ matrix.target }}"
             chmod +x "src-tauri/binaries/ffmpeg-${{ matrix.target }}" "src-tauri/binaries/ffprobe-${{ matrix.target }}"
-
           elif [[ "${{ runner.os }}" == "Windows" ]]; then
             curl -L --fail "$BASE_URL/${{ matrix.ffmpeg_asset }}" -o "src-tauri/binaries/ffmpeg-${{ matrix.target }}.exe"
             curl -L --fail "$BASE_URL/${{ matrix.ffprobe_asset }}" -o "src-tauri/binaries/ffprobe-${{ matrix.target }}.exe"
           fi
-
           echo "Prepared sidecars:"
           ls -la src-tauri/binaries
-
       - run: npm ci
-
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
