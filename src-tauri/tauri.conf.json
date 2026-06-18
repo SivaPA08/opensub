@@ -13,7 +13,7 @@
     "windows": [
       {
         "title": "opensub",
-        "fullscreen": true,
+        "maximized": true
       }
     ],
     "security": {
