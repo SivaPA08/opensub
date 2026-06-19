@@ -115,12 +115,16 @@ pub fn get_ffmpeg_command(app: &AppHandle) -> Result<Command, String> {
     }
     #[cfg(not(debug_assertions))]
     {
-        let resource_dir = app.path().resource_dir()
-            .map_err(|e| format!("Failed to get resource dir: {e}"))?;
+        let _ = app;
+        let exe_dir = std::env::current_exe()
+            .map_err(|e| format!("Failed to get current exe path: {e}"))?
+            .parent()
+            .ok_or("Failed to get exe parent directory")?
+            .to_path_buf();
         let target_triple = env!("TARGET_TRIPLE");
         let ext = if cfg!(target_os = "windows") { ".exe" } else { "" };
         let sidecar_name = format!("ffmpeg-{}{}", target_triple, ext);
-        let path = resource_dir.join(&sidecar_name);
+        let path = exe_dir.join(&sidecar_name);
         Ok(Command::new(path))
     }
 }
@@ -133,12 +137,16 @@ pub fn get_ffprobe_command(app: &AppHandle) -> Result<Command, String> {
     }
     #[cfg(not(debug_assertions))]
     {
-        let resource_dir = app.path().resource_dir()
-            .map_err(|e| format!("Failed to get resource dir: {e}"))?;
+        let _ = app;
+        let exe_dir = std::env::current_exe()
+            .map_err(|e| format!("Failed to get current exe path: {e}"))?
+            .parent()
+            .ok_or("Failed to get exe parent directory")?
+            .to_path_buf();
         let target_triple = env!("TARGET_TRIPLE");
         let ext = if cfg!(target_os = "windows") { ".exe" } else { "" };
         let sidecar_name = format!("ffprobe-{}{}", target_triple, ext);
-        let path = resource_dir.join(&sidecar_name);
+        let path = exe_dir.join(&sidecar_name);
         Ok(Command::new(path))
     }
 }
