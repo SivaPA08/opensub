@@ -32,6 +32,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": [
+      "../build/"
+    ],
     "externalBin": [
         "binaries/ffmpeg",
         "binaries/ffprobe"
