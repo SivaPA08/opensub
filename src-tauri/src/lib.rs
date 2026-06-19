@@ -2,6 +2,7 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
+use tauri::{AppHandle, Manager};
 use tokio::net::TcpListener;
 
 mod render;
@@ -186,8 +187,10 @@ async fn handle_client(mut socket: tokio::net::TcpStream) {
 
 
 #[tauri::command]
-fn save_font(name: String, data: Vec<u8>) -> Result<String, String> {
-    let font_dir = PathBuf::from("../backend/fonts");
+fn save_font(app: AppHandle, name: String, data: Vec<u8>) -> Result<String, String> {
+    let font_dir = app.path().app_data_dir()
+        .map_err(|e| format!("Failed to get app data dir: {}", e))?
+        .join("fonts");
     std::fs::create_dir_all(&font_dir).map_err(|e| format!("Failed to create fonts directory: {}", e))?;
 
     let file_path = font_dir.join(&name);

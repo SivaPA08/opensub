@@ -107,50 +107,44 @@ struct RenderState {
     customFontName: Option<String>,
 }
 
-pub fn get_ffmpeg_command() -> Result<Command, String> {
+pub fn get_ffmpeg_command(app: &AppHandle) -> Result<Command, String> {
     #[cfg(debug_assertions)]
     {
+        let _ = app;
         Ok(Command::new("ffmpeg"))
     }
     #[cfg(not(debug_assertions))]
     {
-        let app_dir = std::env::current_exe()
-            .map_err(|e| format!("Failed to get current executable path: {e}"))?
-            .parent()
-            .ok_or_else(|| "Failed to get parent directory of executable".to_string())?
-            .to_path_buf();
-        
+        let resource_dir = app.path().resource_dir()
+            .map_err(|e| format!("Failed to get resource dir: {e}"))?;
         let target_triple = env!("TARGET_TRIPLE");
         let ext = if cfg!(target_os = "windows") { ".exe" } else { "" };
         let sidecar_name = format!("ffmpeg-{}{}", target_triple, ext);
-        let path = app_dir.join(&sidecar_name);
+        let path = resource_dir.join(&sidecar_name);
         Ok(Command::new(path))
     }
 }
 
-pub fn get_ffprobe_command() -> Result<Command, String> {
+pub fn get_ffprobe_command(app: &AppHandle) -> Result<Command, String> {
     #[cfg(debug_assertions)]
     {
+        let _ = app;
         Ok(Command::new("ffprobe"))
     }
     #[cfg(not(debug_assertions))]
     {
-        let app_dir = std::env::current_exe()
-            .map_err(|e| format!("Failed to get current executable path: {e}"))?
-            .parent()
-            .ok_or_else(|| "Failed to get parent directory of executable".to_string())?
-            .to_path_buf();
-        
+        let resource_dir = app.path().resource_dir()
+            .map_err(|e| format!("Failed to get resource dir: {e}"))?;
         let target_triple = env!("TARGET_TRIPLE");
         let ext = if cfg!(target_os = "windows") { ".exe" } else { "" };
         let sidecar_name = format!("ffprobe-{}{}", target_triple, ext);
-        let path = app_dir.join(&sidecar_name);
+        let path = resource_dir.join(&sidecar_name);
         Ok(Command::new(path))
     }
 }
 
-fn ffprobe_info(path: &str) -> Result<(u32, u32, f32, f32), String> {
-    let out = get_ffprobe_command()?
+fn ffprobe_info(app: &AppHandle, path: &str) -> Result<(u32, u32, f32, f32), String> {
+    let out = get_ffprobe_command(app)?
         .args([
             "-v",
             "quiet",
@@ -288,13 +282,16 @@ fn start_static_server(build_dir: PathBuf) -> Result<(u16, thread::JoinHandle<()
 }
 
 fn resolve_build_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .ok_or("bad CARGO_MANIFEST_DIR")?
-        .join("build");
+    #[cfg(debug_assertions)]
+    {
+        let dev = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .ok_or("bad CARGO_MANIFEST_DIR")?
+            .join("build");
 
-    if dev.join("index.html").exists() {
-        return Ok(dev);
+        if dev.join("index.html").exists() {
+            return Ok(dev);
+        }
     }
 
     let res = app.path().resource_dir().map_err(|e| e.to_string())?;
@@ -304,13 +301,13 @@ fn resolve_build_dir(app: &AppHandle) -> Result<PathBuf, String> {
     }
 
     Err(format!(
-        "Svelte build directory not found (index.html missing): {:?} or {:?}",
-        dev, bundled
+        "Svelte build directory not found (index.html missing): {:?}",
+        bundled
     ))
 }
 
 fn render_video(app: &AppHandle, config: RenderConfig) -> Result<PyResponse, String> {
-    let (probe_width, probe_height, fps, duration) = ffprobe_info(&config.input_path)?;
+    let (probe_width, probe_height, fps, duration) = ffprobe_info(app, &config.input_path)?;
 
     let width = config
         .video_info
@@ -424,7 +421,7 @@ fn render_video(app: &AppHandle, config: RenderConfig) -> Result<PyResponse, Str
         thread::sleep(Duration::from_millis(50));
     }
 
-    let mut ffmpeg = get_ffmpeg_command()?
+    let mut ffmpeg = get_ffmpeg_command(app)?
         .args([
             "-y",
             "-i",
@@ -612,10 +609,8 @@ fn render_video(app: &AppHandle, config: RenderConfig) -> Result<PyResponse, Str
                 let mut custom_font_name = None;
 
                 if let Some(font_file) = config.style.custom_font.as_ref() {
-                    let font_path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-                        .parent()
-                        .unwrap()
-                        .join("backend")
+                    let font_path = app.path().app_data_dir()
+                        .map_err(|e| format!("failed to get app data dir: {e}"))?
                         .join("fonts")
                         .join(font_file);
 

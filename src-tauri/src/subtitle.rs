@@ -37,8 +37,8 @@ pub struct DownloadProgressPayload {
 
 use crate::render::{get_ffmpeg_command, get_ffprobe_command};
 
-fn ffprobe_duration(filepath: &str) -> Result<f32, String> {
-    let output = get_ffprobe_command()?
+fn ffprobe_duration(app: &AppHandle, filepath: &str) -> Result<f32, String> {
+    let output = get_ffprobe_command(app)?
         .args([
             "-v",
             "quiet",
@@ -151,7 +151,7 @@ fn transcribe_words(
 ) -> Result<Vec<Sub>, String> {
     let max_words = max_words.max(1);
 
-    let duration = ffprobe_duration(filename).unwrap_or(0.0);
+    let duration = ffprobe_duration(app, filename).unwrap_or(0.0);
 
     let app_dir = app
         .path()
@@ -203,7 +203,7 @@ fn transcribe_words(
 
     let wav_path = {
         let tmp = std::env::temp_dir().join("opensub_audio.wav");
-        let status = get_ffmpeg_command()?
+        let status = get_ffmpeg_command(app)?
             .args([
                 "-y",
                 "-i",
