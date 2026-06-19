@@ -107,6 +107,52 @@ struct RenderState {
     customFontName: Option<String>,
 }
 
+#[allow(dead_code)]
+fn find_sidecar_path(app: &AppHandle, base_name: &str) -> Result<PathBuf, String> {
+    let target_triple = env!("TARGET_TRIPLE");
+    let ext = if cfg!(target_os = "windows") { ".exe" } else { "" };
+
+    // Candidates relative to exe_dir
+    let exe_dir = std::env::current_exe()
+        .map_err(|e| format!("Failed to get current exe path: {e}"))?
+        .parent()
+        .ok_or("Failed to get exe parent directory")?
+        .to_path_buf();
+
+    // Candidates relative to resource_dir
+    let resource_dir = app.path().resource_dir().ok();
+
+    let mut candidates = Vec::new();
+
+    // 1. Exe dir candidates
+    candidates.push(exe_dir.join(format!("{}-{}{}", base_name, target_triple, ext)));
+    candidates.push(exe_dir.join(format!("{}{}", base_name, ext)));
+
+    // 2. Resource dir candidates
+    if let Some(ref res_dir) = resource_dir {
+        candidates.push(res_dir.join(format!("{}-{}{}", base_name, target_triple, ext)));
+        candidates.push(res_dir.join(format!("{}{}", base_name, ext)));
+        candidates.push(res_dir.join("binaries").join(format!("{}-{}{}", base_name, target_triple, ext)));
+        candidates.push(res_dir.join("binaries").join(format!("{}{}", base_name, ext)));
+        candidates.push(res_dir.join("_up_").join("binaries").join(format!("{}-{}{}", base_name, target_triple, ext)));
+        candidates.push(res_dir.join("_up_").join("binaries").join(format!("{}{}", base_name, ext)));
+        candidates.push(res_dir.join("_up_").join("_up_").join("binaries").join(format!("{}-{}{}", base_name, target_triple, ext)));
+        candidates.push(res_dir.join("_up_").join("_up_").join("binaries").join(format!("{}{}", base_name, ext)));
+    }
+
+    // Search for first existing candidate
+    for path in &candidates {
+        if path.exists() && path.is_file() {
+            return Ok(path.clone());
+        }
+    }
+
+    Err(format!(
+        "Sidecar '{}' not found. Tried candidates: {:?}",
+        base_name, candidates
+    ))
+}
+
 pub fn get_ffmpeg_command(app: &AppHandle) -> Result<Command, String> {
     #[cfg(debug_assertions)]
     {
@@ -115,16 +161,7 @@ pub fn get_ffmpeg_command(app: &AppHandle) -> Result<Command, String> {
     }
     #[cfg(not(debug_assertions))]
     {
-        let _ = app;
-        let exe_dir = std::env::current_exe()
-            .map_err(|e| format!("Failed to get current exe path: {e}"))?
-            .parent()
-            .ok_or("Failed to get exe parent directory")?
-            .to_path_buf();
-        let target_triple = env!("TARGET_TRIPLE");
-        let ext = if cfg!(target_os = "windows") { ".exe" } else { "" };
-        let sidecar_name = format!("ffmpeg-{}{}", target_triple, ext);
-        let path = exe_dir.join(&sidecar_name);
+        let path = find_sidecar_path(app, "ffmpeg")?;
         Ok(Command::new(path))
     }
 }
@@ -137,16 +174,7 @@ pub fn get_ffprobe_command(app: &AppHandle) -> Result<Command, String> {
     }
     #[cfg(not(debug_assertions))]
     {
-        let _ = app;
-        let exe_dir = std::env::current_exe()
-            .map_err(|e| format!("Failed to get current exe path: {e}"))?
-            .parent()
-            .ok_or("Failed to get exe parent directory")?
-            .to_path_buf();
-        let target_triple = env!("TARGET_TRIPLE");
-        let ext = if cfg!(target_os = "windows") { ".exe" } else { "" };
-        let sidecar_name = format!("ffprobe-{}{}", target_triple, ext);
-        let path = exe_dir.join(&sidecar_name);
+        let path = find_sidecar_path(app, "ffprobe")?;
         Ok(Command::new(path))
     }
 }
