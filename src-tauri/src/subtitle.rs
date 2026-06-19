@@ -151,7 +151,7 @@ fn transcribe_words(
 ) -> Result<Vec<Sub>, String> {
     let max_words = max_words.max(1);
 
-    let duration = ffprobe_duration(app, filename).unwrap_or(0.0);
+    let _duration = ffprobe_duration(app, filename).unwrap_or(0.0);
 
     let app_dir = app
         .path()
@@ -200,6 +200,12 @@ fn transcribe_words(
     params.set_print_realtime(false);
     params.set_print_timestamps(false);
     params.set_token_timestamps(true);
+
+    let app_clone = app.clone();
+    params.set_progress_callback_safe(move |progress| {
+        let scaled_pct = 40.0 + (progress as f32 * 0.55);
+        let _ = app_clone.emit("subtitle-progress", scaled_pct.min(99.0f32));
+    });
 
     let wav_path = {
         let tmp = std::env::temp_dir().join("opensub_audio.wav");
@@ -257,12 +263,6 @@ fn transcribe_words(
 
         let start_ts = segment.start_timestamp();
         let end_ts = segment.end_timestamp();
-
-        if duration > 0.0 {
-            let pct = ((end_ts as f32 / 100.0) / duration) * 100.0;
-            let scaled_pct: f32 = 40.0 + (pct * 0.55);
-            let _ = app.emit("subtitle-progress", scaled_pct.min(99.0f32));
-        }
 
         let seg_start = start_ts as f32 / 100.0;
         let seg_end = end_ts as f32 / 100.0;

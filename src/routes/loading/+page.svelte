@@ -21,6 +21,42 @@
     let progress = $state<number>(0);
     let statusText = $state<string>("Initializing model...");
     let unlisten: (() => void) | null = null;
+    let progressTimer: ReturnType<typeof setInterval> | null = null;
+
+    // Smooth progress interpolation:
+    // Backend events arrive in sparse jumps (e.g. 40 → 76 → 100).
+    // We ease `progress` toward `targetProgress` and add a slow creep
+    // between updates so the bar always feels alive.
+    let targetProgress = 0;
+    let smoothProgress = 0;
+
+    function startProgressAnimation() {
+        progressTimer = setInterval(() => {
+            // Snap to 100 immediately when done
+            if (targetProgress >= 100) {
+                smoothProgress = 100;
+                progress = 100;
+                return;
+            }
+
+            if (smoothProgress < targetProgress) {
+                // Catch up to real backend value quickly
+                const diff = targetProgress - smoothProgress;
+                smoothProgress += Math.max(0.5, diff * 0.15);
+                if (smoothProgress > targetProgress) smoothProgress = targetProgress;
+            } else if (targetProgress >= 5) {
+                // Asymptotic creep toward 98%: decelerates as it gets higher,
+                // so the bar always moves but never actually reaches 98%.
+                // At 40%: ~4.6%/sec, at 70%: ~1.7%/sec, at 90%: ~0.6%/sec
+                const remaining = 98 - smoothProgress;
+                if (remaining > 0.1) {
+                    smoothProgress += remaining * 0.004;
+                }
+            }
+
+            progress = Math.round(smoothProgress);
+        }, 50);
+    }
 
     async function generateSubtitle(videoUrl: string, count: number, model: string) {
         try {
@@ -53,15 +89,19 @@
     onMount(async () => {
         // Listen for progress events from the Rust backend
         unlisten = await listen<number>("subtitle-progress", (event) => {
-            progress = Math.round(event.payload);
-            if (progress < 10) {
+            targetProgress = event.payload;
+            if (targetProgress < 10) {
                 statusText = "Loading model...";
-            } else if (progress < 100) {
+            } else if (targetProgress < 40) {
+                statusText = "Preparing audio...";
+            } else if (targetProgress < 100) {
                 statusText = "Transcribing audio...";
             } else {
                 statusText = "Finalizing subtitles...";
             }
         });
+
+        startProgressAnimation();
 
         const video = get(videoPath);
         const count = get(wordPerFrame);
@@ -74,6 +114,7 @@
     });
 
     onDestroy(() => {
+        if (progressTimer) clearInterval(progressTimer);
         if (unlisten) unlisten();
     });
 </script>
