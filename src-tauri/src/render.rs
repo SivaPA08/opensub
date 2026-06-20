@@ -286,14 +286,21 @@ fn resolve_build_dir(app: &AppHandle) -> Result<PathBuf, String> {
     }
 
     let res = app.path().resource_dir().map_err(|e| e.to_string())?;
+    
+    // Check for _up_/build (due to Tauri's handling of parent directory resources)
+    let bundled_up = res.join("_up_").join("build");
+    if bundled_up.join("index.html").exists() {
+        return Ok(bundled_up);
+    }
+
     let bundled = res.join("build");
     if bundled.join("index.html").exists() {
         return Ok(bundled);
     }
 
     Err(format!(
-        "Svelte build directory not found (index.html missing): {:?}",
-        bundled
+        "Svelte build directory not found (index.html missing in {:?} and {:?})",
+        bundled_up, bundled
     ))
 }
 
