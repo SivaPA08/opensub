@@ -111,7 +111,7 @@ struct RenderState {
 pub async fn get_ffmpeg_path(app: &AppHandle) -> Result<PathBuf, String> {
     let sidecar = app
         .shell()
-        .sidecar("ffmpeg")
+        .sidecar("opensub-ffmpeg")
         .map_err(|e| format!("Failed to get ffmpeg sidecar: {e}"))?;
     let std_cmd = std::process::Command::from(sidecar);
     Ok(PathBuf::from(std_cmd.get_program()))
@@ -120,7 +120,7 @@ pub async fn get_ffmpeg_path(app: &AppHandle) -> Result<PathBuf, String> {
 pub async fn get_ffprobe_path(app: &AppHandle) -> Result<PathBuf, String> {
     let sidecar = app
         .shell()
-        .sidecar("ffprobe")
+        .sidecar("opensub-ffprobe")
         .map_err(|e| format!("Failed to get ffprobe sidecar: {e}"))?;
     let std_cmd = std::process::Command::from(sidecar);
     Ok(PathBuf::from(std_cmd.get_program()))

@@ -105,14 +105,14 @@ jobs:
             ext=""
           fi
 
-          curl -L --fail "$BASE_URL/${{ matrix.ffmpeg_asset }}" -o "src-tauri/binaries/ffmpeg-${{ matrix.target }}${ext}.gz"
-          gunzip -f "src-tauri/binaries/ffmpeg-${{ matrix.target }}${ext}.gz"
+          curl -L --fail "$BASE_URL/${{ matrix.ffmpeg_asset }}" -o "src-tauri/binaries/opensub-ffmpeg-${{ matrix.target }}${ext}.gz"
+          gunzip -f "src-tauri/binaries/opensub-ffmpeg-${{ matrix.target }}${ext}.gz"
 
-          curl -L --fail "$BASE_URL/${{ matrix.ffprobe_asset }}" -o "src-tauri/binaries/ffprobe-${{ matrix.target }}${ext}.gz"
-          gunzip -f "src-tauri/binaries/ffprobe-${{ matrix.target }}${ext}.gz"
+          curl -L --fail "$BASE_URL/${{ matrix.ffprobe_asset }}" -o "src-tauri/binaries/opensub-ffprobe-${{ matrix.target }}${ext}.gz"
+          gunzip -f "src-tauri/binaries/opensub-ffprobe-${{ matrix.target }}${ext}.gz"
 
           if [[ "${{ runner.os }}" != "Windows" ]]; then
-            chmod +x "src-tauri/binaries/ffmpeg-${{ matrix.target }}" "src-tauri/binaries/ffprobe-${{ matrix.target }}"
+            chmod +x "src-tauri/binaries/opensub-ffmpeg-${{ matrix.target }}" "src-tauri/binaries/opensub-ffprobe-${{ matrix.target }}"
           fi
 
           echo "Prepared sidecars:"
