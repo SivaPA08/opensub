@@ -5,11 +5,12 @@ use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
 use tauri::{AppHandle, Emitter, Manager};
+use tauri_plugin_shell::ShellExt;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PyResponse {
@@ -107,80 +108,17 @@ struct RenderState {
     customFontName: Option<String>,
 }
 
-#[allow(dead_code)]
-fn find_sidecar_path(app: &AppHandle, base_name: &str) -> Result<PathBuf, String> {
-    let target_triple = env!("TARGET_TRIPLE");
-    let ext = if cfg!(target_os = "windows") { ".exe" } else { "" };
-
-    // Candidates relative to exe_dir
-    let exe_dir = std::env::current_exe()
-        .map_err(|e| format!("Failed to get current exe path: {e}"))?
-        .parent()
-        .ok_or("Failed to get exe parent directory")?
-        .to_path_buf();
-
-    // Candidates relative to resource_dir
-    let resource_dir = app.path().resource_dir().ok();
-
-    let mut candidates = Vec::new();
-
-    // 1. Exe dir candidates
-    candidates.push(exe_dir.join(format!("{}-{}{}", base_name, target_triple, ext)));
-    candidates.push(exe_dir.join(format!("{}{}", base_name, ext)));
-
-    // 2. Resource dir candidates
-    if let Some(ref res_dir) = resource_dir {
-        candidates.push(res_dir.join(format!("{}-{}{}", base_name, target_triple, ext)));
-        candidates.push(res_dir.join(format!("{}{}", base_name, ext)));
-        candidates.push(res_dir.join("binaries").join(format!("{}-{}{}", base_name, target_triple, ext)));
-        candidates.push(res_dir.join("binaries").join(format!("{}{}", base_name, ext)));
-        candidates.push(res_dir.join("_up_").join("binaries").join(format!("{}-{}{}", base_name, target_triple, ext)));
-        candidates.push(res_dir.join("_up_").join("binaries").join(format!("{}{}", base_name, ext)));
-        candidates.push(res_dir.join("_up_").join("_up_").join("binaries").join(format!("{}-{}{}", base_name, target_triple, ext)));
-        candidates.push(res_dir.join("_up_").join("_up_").join("binaries").join(format!("{}{}", base_name, ext)));
-    }
-
-    // Search for first existing candidate
-    for path in &candidates {
-        if path.exists() && path.is_file() {
-            return Ok(path.clone());
-        }
-    }
-
-    Err(format!(
-        "Sidecar '{}' not found. Tried candidates: {:?}",
-        base_name, candidates
-    ))
+pub async fn get_ffmpeg_command(app: &AppHandle) -> Result<tauri_plugin_shell::Command, String> {
+    app.shell().sidecar("ffmpeg").map_err(|e| format!("Failed to get ffmpeg sidecar: {e}"))
 }
 
-pub fn get_ffmpeg_command(app: &AppHandle) -> Result<Command, String> {
-    #[cfg(debug_assertions)]
-    {
-        let _ = app;
-        Ok(Command::new("ffmpeg"))
-    }
-    #[cfg(not(debug_assertions))]
-    {
-        let path = find_sidecar_path(app, "ffmpeg")?;
-        Ok(Command::new(path))
-    }
+pub async fn get_ffprobe_command(app: &AppHandle) -> Result<tauri_plugin_shell::Command, String> {
+    app.shell().sidecar("ffprobe").map_err(|e| format!("Failed to get ffprobe sidecar: {e}"))
 }
 
-pub fn get_ffprobe_command(app: &AppHandle) -> Result<Command, String> {
-    #[cfg(debug_assertions)]
-    {
-        let _ = app;
-        Ok(Command::new("ffprobe"))
-    }
-    #[cfg(not(debug_assertions))]
-    {
-        let path = find_sidecar_path(app, "ffprobe")?;
-        Ok(Command::new(path))
-    }
-}
-
-fn ffprobe_info(app: &AppHandle, path: &str) -> Result<(u32, u32, f32, f32), String> {
-    let out = get_ffprobe_command(app)?
+async fn ffprobe_info(app: &AppHandle, path: &str) -> Result<(u32, u32, f32, f32), String> {
+    let out = get_ffprobe_command(app)
+        .await?
         .args([
             "-v",
             "quiet",
@@ -191,6 +129,7 @@ fn ffprobe_info(app: &AppHandle, path: &str) -> Result<(u32, u32, f32, f32), Str
             path,
         ])
         .output()
+        .await
         .map_err(|e| format!("ffprobe failed: {e}"))?;
 
     if !out.status.success() {
@@ -342,8 +281,8 @@ fn resolve_build_dir(app: &AppHandle) -> Result<PathBuf, String> {
     ))
 }
 
-fn render_video(app: &AppHandle, config: RenderConfig) -> Result<PyResponse, String> {
-    let (probe_width, probe_height, fps, duration) = ffprobe_info(app, &config.input_path)?;
+async fn render_video(app: AppHandle, config: RenderConfig) -> Result<PyResponse, String> {
+    let (probe_width, probe_height, fps, duration) = ffprobe_info(&app, &config.input_path).await?;
 
     let width = config
         .video_info
@@ -457,7 +396,8 @@ fn render_video(app: &AppHandle, config: RenderConfig) -> Result<PyResponse, Str
         thread::sleep(Duration::from_millis(50));
     }
 
-    let mut ffmpeg = get_ffmpeg_command(app)?
+    let mut ffmpeg = get_ffmpeg_command(&app)
+        .await?
         .args([
             "-y",
             "-i",
@@ -720,11 +660,7 @@ fn render_video(app: &AppHandle, config: RenderConfig) -> Result<PyResponse, Str
 
 #[tauri::command]
 pub async fn run_render(app: AppHandle, config_json: String) -> Result<PyResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        let config: RenderConfig =
-            serde_json::from_str(&config_json).map_err(|e| format!("bad config json: {e}"))?;
-        render_video(&app, config)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    let config: RenderConfig =
+        serde_json::from_str(&config_json).map_err(|e| format!("bad config json: {e}"))?;
+    render_video(app, config).await
 }
