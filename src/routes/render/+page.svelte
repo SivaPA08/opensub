@@ -98,6 +98,7 @@
             };
             customFontBase64?: string;
             customFontName?: string;
+            customFonts?: Array<{ name: string; base64: string }>;
         }) => {
             if (state.subtitles !== undefined) {
                 activeSubtitles = state.subtitles.map((sub: any) => {
@@ -167,7 +168,26 @@
             if (state.scaleFactor !== undefined)
                 scaleFactor = state.scaleFactor;
 
-            if (state.customFontBase64 && state.customFontName) {
+            if (state.customFonts !== undefined) {
+                for (const font of state.customFonts) {
+                    const fontName = font.name;
+                    const styleId = `font-face-${fontName}`;
+                    let styleEl = document.getElementById(styleId);
+                    if (!styleEl) {
+                        styleEl = document.createElement("style");
+                        styleEl.id = styleId;
+                        document.head.appendChild(styleEl);
+                    }
+                    styleEl.innerHTML = `
+                        @font-face {
+                            font-family: '${fontName}';
+                            src: url('data:font/truetype;charset=utf-8;base64,${font.base64}');
+                            font-weight: normal;
+                            font-style: normal;
+                        }
+                    `;
+                }
+            } else if (state.customFontBase64 && state.customFontName) {
                 const fontName = state.customFontName;
                 const styleId = `font-face-${fontName}`;
                 let styleEl = document.getElementById(styleId);

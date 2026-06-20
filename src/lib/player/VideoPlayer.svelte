@@ -21,6 +21,7 @@
     import { save } from "@tauri-apps/plugin-dialog";
     import { revealItemInDir } from "@tauri-apps/plugin-opener";
     import { listen } from "@tauri-apps/api/event";
+    import { ensureFontLoaded } from "../fontLoader.js";
     import GlitchText from "../animations/GlitchText.svelte";
     import SplitText from "../animations/SplitText.svelte";
     import TypingText from "../animations/TypingText.svelte";
@@ -120,6 +121,18 @@
             animationType: sub.animationType !== undefined ? sub.animationType : ($subtitleAnimation.animationType ?? 'none'),
             animationSpeed: sub.animationSpeed !== undefined ? sub.animationSpeed : ($subtitleAnimation.animationSpeed ?? 200),
         };
+    }
+
+    // Reactively ensure all custom fonts are loaded
+    $: {
+        if ($subtitleAnimation.customFontFile) {
+            ensureFontLoaded($subtitleAnimation.customFontFile);
+        }
+        for (const sub of $subtitle) {
+            if (sub.customFontFile) {
+                ensureFontLoaded(sub.customFontFile);
+            }
+        }
     }
 
     // Resolved styles for active subtitle falling back to global settings

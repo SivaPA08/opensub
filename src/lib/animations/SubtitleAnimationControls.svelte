@@ -4,6 +4,7 @@
     import ColorPicker from "../colorpicker/ColorPicker.svelte";
     import { invoke } from "@tauri-apps/api/core";
     import { open } from "@tauri-apps/plugin-dialog";
+    import { ensureFontLoaded } from "../fontLoader.js";
 
 
     // Bindings for local settings, initialized from store
@@ -66,6 +67,23 @@
         }
     }
 
+    // Reactively update global style when no selection is active
+    $: {
+        if (!suppressApply && !hasSelection) {
+            subtitleAnimation.set({
+                fontSize,
+                fontColor,
+                backgroundColor,
+                customFont,
+                customFontFile,
+                fontOpacity,
+                backgroundOpacity,
+                animationType: $subtitleAnimation.animationType,
+                animationSpeed: $subtitleAnimation.animationSpeed
+            });
+        }
+    }
+
     // Helper to dynamically parse any hex/rgb/rgba to custom opacity rgba
     function hexOrRgbToRgba(color: string, opacity: number): string {
         if (!color) return `rgba(0,0,0,${opacity})`;
@@ -95,37 +113,6 @@
         return color; // Fallback
     }
 
-    let loadedFonts = new Set<string>();
-
-    async function ensureFontLoaded(fontPath: string) {
-        if (!fontPath || loadedFonts.has(fontPath)) return;
-        try {
-            const base64Data = await invoke<string>("get_font_base64", { path: fontPath });
-            const fileName = fontPath.split('/').pop() || fontPath;
-            const fontName = `custom-${fileName.replace(/\W+/g, '-')}`;
-            
-            const style = document.createElement('style');
-            style.id = `font-face-${fontName}`;
-            style.innerHTML = `
-                @font-face {
-                    font-family: '${fontName}';
-                    src: url('data:font/truetype;charset=utf-8;base64,${base64Data}');
-                    font-weight: normal;
-                    font-style: normal;
-                }
-            `;
-            
-            const existing = document.getElementById(style.id);
-            if (existing) {
-                existing.remove();
-            }
-            document.head.appendChild(style);
-            loadedFonts.add(fontPath);
-        } catch (err) {
-            console.error("Failed to load font background-wise:", err);
-        }
-    }
-
     $: if (customFontFile && customFontFile.includes("/")) {
         ensureFontLoaded(customFontFile);
     }
@@ -145,32 +132,13 @@
             });
             
             if (selected && typeof selected === "string") {
-                const base64Data = await invoke<string>("get_font_base64", { path: selected });
-                
-                const fileName = selected.split('/').pop() || selected;
-                const fontName = `custom-${fileName.replace(/\W+/g, '-')}`;
-                
-                // Dynamic @font-face injection
-                const style = document.createElement('style');
-                style.id = `font-face-${fontName}`;
-                style.innerHTML = `
-                    @font-face {
-                        font-family: '${fontName}';
-                        src: url('data:font/truetype;charset=utf-8;base64,${base64Data}');
-                        font-weight: normal;
-                        font-style: normal;
-                    }
-                `;
-                
-                const existing = document.getElementById(style.id);
-                if (existing) {
-                    existing.remove();
+                const fontName = await ensureFontLoaded(selected);
+                if (fontName) {
+                    const fileName = selected.split('/').pop() || selected;
+                    customFont = fontName;
+                    customFontFile = selected;
+                    customFontName = fileName;
                 }
-                document.head.appendChild(style);
-                
-                customFont = fontName;
-                customFontFile = selected;
-                customFontName = fileName;
             }
         } catch (err) {
             console.error("Failed to select font:", err);

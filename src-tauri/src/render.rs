@@ -101,6 +101,12 @@ struct RenderStateSub {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+struct CustomFontData {
+    name: String,
+    base64: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct RenderState {
     subtitles: Vec<RenderStateSub>,
     scaleFactor: f32,
@@ -108,6 +114,8 @@ struct RenderState {
     customFontBase64: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     customFontName: Option<String>,
+    #[serde(rename = "customFonts", skip_serializing_if = "Option::is_none")]
+    custom_fonts: Option<Vec<CustomFontData>>,
 }
 
 pub async fn get_ffmpeg_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -116,7 +124,23 @@ pub async fn get_ffmpeg_path(app: &AppHandle) -> Result<PathBuf, String> {
         .sidecar("opensub-ffmpeg")
         .map_err(|e| format!("Failed to get ffmpeg sidecar: {e}"))?;
     let std_cmd = std::process::Command::from(sidecar);
-    Ok(PathBuf::from(std_cmd.get_program()))
+    let path = PathBuf::from(std_cmd.get_program());
+    
+    // Check if the resolved sidecar is a mock/placeholder (e.g. less than 1MB or doesn't exist)
+    let is_mock = if let Ok(metadata) = std::fs::metadata(&path) {
+        metadata.len() < 1024 * 1024
+    } else {
+        true
+    };
+
+    if is_mock {
+        // Fallback to system ffmpeg if available
+        if std::process::Command::new("ffmpeg").arg("-version").output().is_ok() {
+            return Ok(PathBuf::from("ffmpeg"));
+        }
+    }
+
+    Ok(path)
 }
 
 pub async fn get_ffprobe_path(app: &AppHandle) -> Result<PathBuf, String> {
@@ -125,7 +149,23 @@ pub async fn get_ffprobe_path(app: &AppHandle) -> Result<PathBuf, String> {
         .sidecar("opensub-ffprobe")
         .map_err(|e| format!("Failed to get ffprobe sidecar: {e}"))?;
     let std_cmd = std::process::Command::from(sidecar);
-    Ok(PathBuf::from(std_cmd.get_program()))
+    let path = PathBuf::from(std_cmd.get_program());
+
+    // Check if the resolved sidecar is a mock/placeholder (e.g. less than 1MB or doesn't exist)
+    let is_mock = if let Ok(metadata) = std::fs::metadata(&path) {
+        metadata.len() < 1024 * 1024
+    } else {
+        true
+    };
+
+    if is_mock {
+        // Fallback to system ffprobe if available
+        if std::process::Command::new("ffprobe").arg("-version").output().is_ok() {
+            return Ok(PathBuf::from("ffprobe"));
+        }
+    }
+
+    Ok(path)
 }
 
 async fn ffprobe_info(app: &AppHandle, path: &str) -> Result<(u32, u32, f32, f32), String> {
@@ -502,6 +542,8 @@ async fn render_video(app: AppHandle, config: RenderConfig) -> Result<PyResponse
     let total_frames = (duration * fps).round().max(1.0) as u32;
     let frame_interval_ms = (1000.0 / fps).round() as u64;
 
+    let custom_fonts = load_custom_fonts(&app, &config);
+
     let mut prev_sub_id: Option<Vec<(f32, f32, String)>> = None;
     let mut empty_frame_bytes: Option<Vec<u8>> = None;
     let mut active_frame_bytes: Option<Vec<u8>> = None;
@@ -540,6 +582,7 @@ async fn render_video(app: AppHandle, config: RenderConfig) -> Result<PyResponse
                     scaleFactor: scale_factor,
                     customFontBase64: None,
                     customFontName: None,
+                    custom_fonts: None,
                 };
 
                 let js = format!(
@@ -656,6 +699,7 @@ async fn render_video(app: AppHandle, config: RenderConfig) -> Result<PyResponse
                     scaleFactor: scale_factor,
                     customFontBase64: custom_font_base64,
                     customFontName: custom_font_name,
+                    custom_fonts: Some(custom_fonts.clone()),
                 };
 
                 let js = format!(
@@ -729,4 +773,66 @@ pub async fn run_render(app: AppHandle, config_json: String) -> Result<PyRespons
     let config: RenderConfig =
         serde_json::from_str(&config_json).map_err(|e| format!("bad config json: {e}"))?;
     render_video(app, config).await
+}
+
+fn load_custom_fonts(app: &AppHandle, config: &RenderConfig) -> Vec<CustomFontData> {
+    use std::collections::HashSet;
+    let mut loaded_paths = HashSet::new();
+    let mut fonts = Vec::new();
+
+    let mut font_files = Vec::new();
+    
+    // Add global font file
+    if let Some(ref f) = config.style.custom_font_file {
+        font_files.push((f.clone(), config.style.custom_font.clone()));
+    } else if let Some(ref f) = config.style.custom_font {
+        font_files.push((f.clone(), Some(f.clone())));
+    }
+
+    // Add per-subtitle font files
+    for sub in &config.subtitles {
+        if let Some(ref f) = sub.custom_font_file {
+            font_files.push((f.clone(), sub.custom_font.clone()));
+        } else if let Some(ref f) = sub.custom_font {
+            font_files.push((f.clone(), Some(f.clone())));
+        }
+    }
+
+    for (font_file, font_name_opt) in font_files {
+        if font_file.trim().is_empty() {
+            continue;
+        }
+        let font_path = Path::new(&font_file);
+        let resolved_path = if font_path.exists() && font_path.is_file() {
+            font_path.to_path_buf()
+        } else {
+            match app.path().app_data_dir() {
+                Ok(dir) => dir.join("fonts").join(&font_file),
+                Err(_) => continue,
+            }
+        };
+
+        if resolved_path.exists() && resolved_path.is_file() {
+            let path_str = resolved_path.to_string_lossy().to_string();
+            if loaded_paths.contains(&path_str) {
+                continue;
+            }
+            if let Ok(bytes) = fs::read(&resolved_path) {
+                let base64_str = base64::engine::general_purpose::STANDARD.encode(bytes);
+                let name = font_name_opt.clone().unwrap_or_else(|| {
+                    resolved_path.file_name()
+                        .and_then(|n| n.to_str())
+                        .map(|s| s.to_string())
+                        .unwrap_or_else(|| "custom-font".to_string())
+                });
+                fonts.push(CustomFontData {
+                    name,
+                    base64: base64_str,
+                });
+                loaded_paths.insert(path_str);
+            }
+        }
+    }
+
+    fonts
 }
