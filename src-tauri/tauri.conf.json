@@ -33,7 +33,7 @@
     "active": true,
     "targets": "all",
     "resources": [
-      "../build/"
+      "../build"
     ],
     "externalBin": [
         "binaries/opensub-ffmpeg",
