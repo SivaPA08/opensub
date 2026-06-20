@@ -1,5 +1,5 @@
 use base64::Engine;
-use headless_chrome::{Browser, LaunchOptionsBuilder, protocol::cdp::Page};
+use headless_chrome::{protocol::cdp::Page, Browser, LaunchOptionsBuilder};
 use serde::{Deserialize, Serialize};
 use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
@@ -109,13 +109,21 @@ struct RenderState {
 }
 
 pub async fn get_ffmpeg_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let sidecar = app.shell().sidecar("ffmpeg").map_err(|e| format!("Failed to get ffmpeg sidecar: {e}"))?;
-    Ok(sidecar.path().to_path_buf())
+    let sidecar = app
+        .shell()
+        .sidecar("ffmpeg")
+        .map_err(|e| format!("Failed to get ffmpeg sidecar: {e}"))?;
+    let std_cmd = std::process::Command::from(sidecar);
+    Ok(PathBuf::from(std_cmd.get_program()))
 }
 
 pub async fn get_ffprobe_path(app: &AppHandle) -> Result<PathBuf, String> {
-    let sidecar = app.shell().sidecar("ffprobe").map_err(|e| format!("Failed to get ffprobe sidecar: {e}"))?;
-    Ok(sidecar.path().to_path_buf())
+    let sidecar = app
+        .shell()
+        .sidecar("ffprobe")
+        .map_err(|e| format!("Failed to get ffprobe sidecar: {e}"))?;
+    let std_cmd = std::process::Command::from(sidecar);
+    Ok(PathBuf::from(std_cmd.get_program()))
 }
 
 async fn ffprobe_info(app: &AppHandle, path: &str) -> Result<(u32, u32, f32, f32), String> {
@@ -209,7 +217,13 @@ fn serve_one_connection(mut stream: TcpStream, build_dir: &Path) -> Result<(), S
         .and_then(|line| line.split_whitespace().nth(1))
         .unwrap_or("/");
 
-    let path_clean = path.split('?').next().unwrap_or(path).split('#').next().unwrap_or(path);
+    let path_clean = path
+        .split('?')
+        .next()
+        .unwrap_or(path)
+        .split('#')
+        .next()
+        .unwrap_or(path);
     let rel = path_clean.trim_start_matches('/');
     let candidate = if rel.is_empty() {
         build_dir.join("index.html")
@@ -223,7 +237,8 @@ fn serve_one_connection(mut stream: TcpStream, build_dir: &Path) -> Result<(), S
         build_dir.join("index.html")
     };
 
-    let body = fs::read(&file_path).map_err(|e| format!("failed to read {:?}: {}", file_path, e))?;
+    let body =
+        fs::read(&file_path).map_err(|e| format!("failed to read {:?}: {}", file_path, e))?;
     let mime = mime_for_path(&file_path);
 
     let header = format!(
@@ -319,6 +334,7 @@ async fn render_video(app: AppHandle, config: RenderConfig) -> Result<PyResponse
         })
         .unwrap_or(1.0);
 
+    #[allow(unused_mut)]
     let mut render_url = None;
     let mut _server_handle = None;
 
@@ -350,7 +366,8 @@ async fn render_video(app: AppHandle, config: RenderConfig) -> Result<PyResponse
         .build()
         .map_err(|e| format!("failed to build Chrome options: {}", e))?;
 
-    let browser = Browser::new(launch_options).map_err(|e| format!("failed to launch browser: {}", e))?;
+    let browser =
+        Browser::new(launch_options).map_err(|e| format!("failed to launch browser: {}", e))?;
     let tab = browser
         .new_tab()
         .map_err(|e| format!("failed to open tab: {}", e))?;
@@ -358,22 +375,25 @@ async fn render_video(app: AppHandle, config: RenderConfig) -> Result<PyResponse
     tab.set_transparent_background_color()
         .map_err(|e| format!("failed to set transparent background color: {}", e))?;
 
-    tab.call_method(headless_chrome::protocol::cdp::Emulation::SetDeviceMetricsOverride {
-        width,
-        height,
-        device_scale_factor: 1.0,
-        mobile: false,
-        scale: None,
-        screen_width: None,
-        screen_height: None,
-        position_x: None,
-        position_y: None,
-        dont_set_visible_size: None,
-        screen_orientation: None,
-        viewport: None,
-        display_feature: None,
-        device_posture: None,
-    }).map_err(|e| format!("failed to set device metrics: {}", e))?;
+    tab.call_method(
+        headless_chrome::protocol::cdp::Emulation::SetDeviceMetricsOverride {
+            width,
+            height,
+            device_scale_factor: 1.0,
+            mobile: false,
+            scale: None,
+            screen_width: None,
+            screen_height: None,
+            position_x: None,
+            position_y: None,
+            dont_set_visible_size: None,
+            screen_orientation: None,
+            viewport: None,
+            display_feature: None,
+            device_posture: None,
+        },
+    )
+    .map_err(|e| format!("failed to set device metrics: {}", e))?;
 
     tab.navigate_to(&render_url)
         .map_err(|e| format!("failed to navigate to render page: {}", e))?;
@@ -493,7 +513,9 @@ async fn render_video(app: AppHandle, config: RenderConfig) -> Result<PyResponse
 
         let mut is_animated = false;
         for sub in &active_subs {
-            let anim_type = sub.animation_type.as_deref()
+            let anim_type = sub
+                .animation_type
+                .as_deref()
                 .or(config.style.animation_type.as_deref())
                 .unwrap_or("none");
             if !matches!(anim_type, "none" | "" | "scale-in") {
@@ -511,13 +533,21 @@ async fn render_video(app: AppHandle, config: RenderConfig) -> Result<PyResponse
                     customFontName: None,
                 };
 
-                let js = format!("window.setRenderState({});", serde_json::to_string(&state).map_err(|e| e.to_string())?);
+                let js = format!(
+                    "window.setRenderState({});",
+                    serde_json::to_string(&state).map_err(|e| e.to_string())?
+                );
                 tab.evaluate(&js, false)
                     .map_err(|e| format!("failed to clear render state: {}", e))?;
 
                 empty_frame_bytes = Some(
-                    tab.capture_screenshot(Page::CaptureScreenshotFormatOption::Png, None, None, true)
-                        .map_err(|e| format!("failed to capture empty frame: {}", e))?,
+                    tab.capture_screenshot(
+                        Page::CaptureScreenshotFormatOption::Png,
+                        None,
+                        None,
+                        true,
+                    )
+                    .map_err(|e| format!("failed to capture empty frame: {}", e))?,
                 );
                 prev_sub_id = None;
             }
@@ -528,10 +558,7 @@ async fn render_video(app: AppHandle, config: RenderConfig) -> Result<PyResponse
             for sub in &active_subs {
                 let time_offset = t - sub.start;
 
-                let font_size = sub
-                    .font_size
-                    .or(config.style.font_size)
-                    .unwrap_or(28.0);
+                let font_size = sub.font_size.or(config.style.font_size).unwrap_or(28.0);
 
                 let sub_style = RenderStateStyle {
                     fontSize: font_size,
@@ -588,7 +615,9 @@ async fn render_video(app: AppHandle, config: RenderConfig) -> Result<PyResponse
                 let mut custom_font_name = None;
 
                 if let Some(font_file) = config.style.custom_font.as_ref() {
-                    let font_path = app.path().app_data_dir()
+                    let font_path = app
+                        .path()
+                        .app_data_dir()
                         .map_err(|e| format!("failed to get app data dir: {e}"))?
                         .join("fonts")
                         .join(font_file);
@@ -596,7 +625,8 @@ async fn render_video(app: AppHandle, config: RenderConfig) -> Result<PyResponse
                     if font_path.exists() {
                         let bytes = fs::read(&font_path)
                             .map_err(|e| format!("failed to read font {:?}: {}", font_path, e))?;
-                        custom_font_base64 = Some(base64::engine::general_purpose::STANDARD.encode(bytes));
+                        custom_font_base64 =
+                            Some(base64::engine::general_purpose::STANDARD.encode(bytes));
                         custom_font_name = Some(font_file.clone());
                     }
                 }
@@ -608,7 +638,10 @@ async fn render_video(app: AppHandle, config: RenderConfig) -> Result<PyResponse
                     customFontName: custom_font_name,
                 };
 
-                let js = format!("window.setRenderState({});", serde_json::to_string(&state).map_err(|e| e.to_string())?);
+                let js = format!(
+                    "window.setRenderState({});",
+                    serde_json::to_string(&state).map_err(|e| e.to_string())?
+                );
                 tab.evaluate(&js, false)
                     .map_err(|e| format!("failed to set render state: {}", e))?;
             }
@@ -616,13 +649,23 @@ async fn render_video(app: AppHandle, config: RenderConfig) -> Result<PyResponse
             if is_animated {
                 thread::sleep(Duration::from_millis(frame_interval_ms));
                 active_frame_bytes = Some(
-                    tab.capture_screenshot(Page::CaptureScreenshotFormatOption::Png, None, None, true)
-                        .map_err(|e| format!("failed to capture animated frame: {}", e))?,
+                    tab.capture_screenshot(
+                        Page::CaptureScreenshotFormatOption::Png,
+                        None,
+                        None,
+                        true,
+                    )
+                    .map_err(|e| format!("failed to capture animated frame: {}", e))?,
                 );
             } else if prev_sub_id.as_ref() != Some(&sub_ids) || active_frame_bytes.is_none() {
                 active_frame_bytes = Some(
-                    tab.capture_screenshot(Page::CaptureScreenshotFormatOption::Png, None, None, true)
-                        .map_err(|e| format!("failed to capture static frame: {}", e))?,
+                    tab.capture_screenshot(
+                        Page::CaptureScreenshotFormatOption::Png,
+                        None,
+                        None,
+                        true,
+                    )
+                    .map_err(|e| format!("failed to capture static frame: {}", e))?,
                 );
             }
 
