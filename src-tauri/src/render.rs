@@ -5,7 +5,7 @@ use std::fs;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::path::{Path, PathBuf};
-use std::process::{Stdio};
+use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
@@ -108,17 +108,19 @@ struct RenderState {
     customFontName: Option<String>,
 }
 
-pub async fn get_ffmpeg_command(app: &AppHandle) -> Result<tauri_plugin_shell::Command, String> {
-    app.shell().sidecar("ffmpeg").map_err(|e| format!("Failed to get ffmpeg sidecar: {e}"))
+pub async fn get_ffmpeg_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let sidecar = app.shell().sidecar("ffmpeg").map_err(|e| format!("Failed to get ffmpeg sidecar: {e}"))?;
+    Ok(sidecar.path().to_path_buf())
 }
 
-pub async fn get_ffprobe_command(app: &AppHandle) -> Result<tauri_plugin_shell::Command, String> {
-    app.shell().sidecar("ffprobe").map_err(|e| format!("Failed to get ffprobe sidecar: {e}"))
+pub async fn get_ffprobe_path(app: &AppHandle) -> Result<PathBuf, String> {
+    let sidecar = app.shell().sidecar("ffprobe").map_err(|e| format!("Failed to get ffprobe sidecar: {e}"))?;
+    Ok(sidecar.path().to_path_buf())
 }
 
 async fn ffprobe_info(app: &AppHandle, path: &str) -> Result<(u32, u32, f32, f32), String> {
-    let out = get_ffprobe_command(app)
-        .await?
+    let ffprobe_path = get_ffprobe_path(app).await?;
+    let out = Command::new(&ffprobe_path)
         .args([
             "-v",
             "quiet",
@@ -129,7 +131,6 @@ async fn ffprobe_info(app: &AppHandle, path: &str) -> Result<(u32, u32, f32, f32
             path,
         ])
         .output()
-        .await
         .map_err(|e| format!("ffprobe failed: {e}"))?;
 
     if !out.status.success() {
@@ -337,7 +338,7 @@ async fn render_video(app: AppHandle, config: RenderConfig) -> Result<PyResponse
     let render_url = if let Some(url) = render_url {
         url
     } else {
-        let build_dir = resolve_build_dir(app)?;
+        let build_dir = resolve_build_dir(&app)?;
         let (port, handle) = start_static_server(build_dir)?;
         _server_handle = Some(handle);
         format!("http://127.0.0.1:{}/render", port)
@@ -396,8 +397,8 @@ async fn render_video(app: AppHandle, config: RenderConfig) -> Result<PyResponse
         thread::sleep(Duration::from_millis(50));
     }
 
-    let mut ffmpeg = get_ffmpeg_command(&app)
-        .await?
+    let ffmpeg_path = get_ffmpeg_path(&app).await?;
+    let mut ffmpeg = Command::new(&ffmpeg_path)
         .args([
             "-y",
             "-i",
@@ -454,10 +455,12 @@ async fn render_video(app: AppHandle, config: RenderConfig) -> Result<PyResponse
     let stderr_log_clone = stderr_log.clone();
     let stderr_handle = thread::spawn(move || {
         let reader = BufReader::new(stderr);
-        for line in reader.lines().flatten() {
-            let mut log = stderr_log_clone.lock().unwrap();
-            log.push_str(&line);
-            log.push('\n');
+        for line in reader.lines() {
+            if let Ok(line) = line {
+                let mut log = stderr_log_clone.lock().unwrap();
+                log.push_str(&line);
+                log.push('\n');
+            }
         }
     });
 

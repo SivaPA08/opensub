@@ -35,10 +35,11 @@ pub struct DownloadProgressPayload {
     pub progress: f64,
 }
 
-use crate::render::{get_ffmpeg_command, get_ffprobe_command};
+use crate::render::{get_ffmpeg_path, get_ffprobe_path};
 
-fn ffprobe_duration(app: &AppHandle, filepath: &str) -> Result<f32, String> {
-    let output = get_ffprobe_command(app)?
+async fn ffprobe_duration(app: &AppHandle, filepath: &str) -> Result<f32, String> {
+    let ffprobe_path = get_ffprobe_path(app).await?;
+    let output = std::process::Command::new(&ffprobe_path)
         .args([
             "-v",
             "quiet",
@@ -143,7 +144,7 @@ fn download_model_file(app: &AppHandle, model_name: &str) -> Result<(), String> 
     Ok(())
 }
 
-fn transcribe_words(
+async fn transcribe_words(
     app: &AppHandle,
     filename: &str,
     max_words: usize,
@@ -151,7 +152,7 @@ fn transcribe_words(
 ) -> Result<Vec<Sub>, String> {
     let max_words = max_words.max(1);
 
-    let _duration = ffprobe_duration(app, filename).unwrap_or(0.0);
+    let _duration = ffprobe_duration(app, filename).await.unwrap_or(0.0);
 
     let app_dir = app
         .path()
@@ -209,7 +210,8 @@ fn transcribe_words(
 
     let wav_path = {
         let tmp = std::env::temp_dir().join("opensub_audio.wav");
-        let status = get_ffmpeg_command(app)?
+        let ffmpeg_path = get_ffmpeg_path(app).await?;
+        let status = std::process::Command::new(&ffmpeg_path)
             .args([
                 "-y",
                 "-i",
@@ -344,24 +346,20 @@ pub async fn getvideo(
     max_words: usize,
     model_name: String,
 ) -> Result<PyResponse, String> {
-    tauri::async_runtime::spawn_blocking(move || {
-        if filename.is_empty() {
-            return Err("Filename is required".to_string());
-        }
-        if max_words == 0 {
-            return Err("max_words is required".to_string());
-        }
+    if filename.is_empty() {
+        return Err("Filename is required".to_string());
+    }
+    if max_words == 0 {
+        return Err("max_words is required".to_string());
+    }
 
-        let subs = transcribe_words(&app, &filename, max_words, &model_name)?;
-        let message = serde_json::to_value(subs).map_err(|e| e.to_string())?;
+    let subs = transcribe_words(&app, &filename, max_words, &model_name).await?;
+    let message = serde_json::to_value(subs).map_err(|e| e.to_string())?;
 
-        Ok(PyResponse {
-            status: "ok".to_string(),
-            message,
-        })
+    Ok(PyResponse {
+        status: "ok".to_string(),
+        message,
     })
-    .await
-    .map_err(|e| e.to_string())?
 }
 
 #[tauri::command]
