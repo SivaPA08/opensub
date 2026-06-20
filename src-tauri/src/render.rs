@@ -38,6 +38,7 @@ pub struct RenderSubtitle {
     pub font_color: Option<String>,
     pub background_color: Option<String>,
     pub custom_font: Option<String>,
+    pub custom_font_file: Option<String>,
     pub font_opacity: Option<f32>,
     pub background_opacity: Option<f32>,
     pub animation_type: Option<String>,
@@ -54,6 +55,7 @@ pub struct RenderStyle {
     pub font_color: Option<String>,
     pub background_color: Option<String>,
     pub custom_font: Option<String>,
+    pub custom_font_file: Option<String>,
     pub font_opacity: Option<f32>,
     pub background_opacity: Option<f32>,
     pub animation_type: Option<String>,
@@ -621,22 +623,33 @@ async fn render_video(app: AppHandle, config: RenderConfig) -> Result<PyResponse
                 let mut custom_font_base64 = None;
                 let mut custom_font_name = None;
 
-                if let Some(font_file) = config.style.custom_font.as_ref() {
-                    let font_path = app
-                        .path()
-                        .app_data_dir()
-                        .map_err(|e| format!("failed to get app data dir: {e}"))?
-                        .join("fonts")
-                        .join(font_file);
+                if let Some(font_file) = config.style.custom_font_file.as_ref().or(config.style.custom_font.as_ref()) {
+                    if !font_file.trim().is_empty() {
+                        let font_path = Path::new(font_file);
+                        let resolved_path = if font_path.exists() && font_path.is_file() {
+                            font_path.to_path_buf()
+                        } else {
+                            app.path()
+                                .app_data_dir()
+                                .map_err(|e| format!("failed to get app data dir: {e}"))?
+                                .join("fonts")
+                                .join(font_file)
+                        };
 
-                    if font_path.exists() {
-                        let bytes = fs::read(&font_path)
-                            .map_err(|e| format!("failed to read font {:?}: {}", font_path, e))?;
-                        custom_font_base64 =
-                            Some(base64::engine::general_purpose::STANDARD.encode(bytes));
-                        custom_font_name = Some(font_file.clone());
+                        if resolved_path.exists() && resolved_path.is_file() {
+                            let bytes = fs::read(&resolved_path)
+                                .map_err(|e| format!("failed to read font {:?}: {}", resolved_path, e))?;
+                            custom_font_base64 =
+                                Some(base64::engine::general_purpose::STANDARD.encode(bytes));
+                            custom_font_name = config.style.custom_font.clone().or_else(|| {
+                                resolved_path.file_name()
+                                    .and_then(|n| n.to_str())
+                                    .map(|s| s.to_string())
+                            });
+                        }
                     }
                 }
+
 
                 let state = RenderState {
                     subtitles: active_payload,

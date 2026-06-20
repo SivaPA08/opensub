@@ -442,6 +442,7 @@
                     fontColor: s.fontColor,
                     backgroundColor: s.backgroundColor,
                     customFont: s.customFont,
+                    customFontFile: s.customFontFile,
                     fontOpacity: s.fontOpacity,
                     backgroundOpacity: s.backgroundOpacity,
                     animationType: s.animationType,

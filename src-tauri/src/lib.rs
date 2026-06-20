@@ -4,6 +4,7 @@ use tokio::fs::File;
 use tokio::io::{AsyncReadExt, AsyncSeekExt, AsyncWriteExt};
 use tauri::{AppHandle, Manager};
 use tokio::net::TcpListener;
+use base64::Engine;
 
 mod render;
 mod subtitle;
@@ -200,6 +201,17 @@ fn save_font(app: AppHandle, name: String, data: Vec<u8>) -> Result<String, Stri
 }
 
 #[tauri::command]
+fn get_font_base64(path: String) -> Result<String, String> {
+    let path_buf = std::path::PathBuf::from(&path);
+    if !path_buf.exists() || !path_buf.is_file() {
+        return Err(format!("Font file not found at path: {}", path));
+    }
+    let bytes = std::fs::read(&path_buf).map_err(|e| format!("Failed to read font file: {}", e))?;
+    Ok(base64::engine::general_purpose::STANDARD.encode(bytes))
+}
+
+
+#[tauri::command]
 fn get_streaming_url(path: String) -> Result<String, String> {
     let mut current_path = get_current_video_path().lock().unwrap();
     *current_path = Some(path);
@@ -238,8 +250,10 @@ pub fn run() {
             subtitle::check_models_status,
             subtitle::download_model,
             save_font,
+            get_font_base64,
             get_streaming_url
         ])
+
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

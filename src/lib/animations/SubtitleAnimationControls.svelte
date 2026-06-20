@@ -3,6 +3,8 @@
     import { subtitleAnimation, selectedSubtitleIndices, subtitle, updateSubtitleProperties, pushUndoSnapshot } from "../store.js";
     import ColorPicker from "../colorpicker/ColorPicker.svelte";
     import { invoke } from "@tauri-apps/api/core";
+    import { open } from "@tauri-apps/plugin-dialog";
+
 
     // Bindings for local settings, initialized from store
     let fontSize = $subtitleAnimation.fontSize;
@@ -93,66 +95,86 @@
         return color; // Fallback
     }
 
-    // Handle Font File selection and loading
-    function handleFontFile(event: Event) {
-        const input = event.target as HTMLInputElement;
-        if (input.files && input.files[0]) {
-            const file = input.files[0];
-            loadFont(file);
-        }
-    }
+    let loadedFonts = new Set<string>();
 
-    function handleDragOver(e: DragEvent) {
-        e.preventDefault();
-    }
-
-    function handleDrop(e: DragEvent) {
-        e.preventDefault();
-        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0]) {
-            loadFont(e.dataTransfer.files[0]);
-        }
-    }
-
-    async function loadFont(file: File) {
-        pushUndoSnapshot(true);
+    async function ensureFontLoaded(fontPath: string) {
+        if (!fontPath || loadedFonts.has(fontPath)) return;
         try {
-            const buffer = await file.arrayBuffer();
-            const data = new Uint8Array(buffer);
+            const base64Data = await invoke<string>("get_font_base64", { path: fontPath });
+            const fileName = fontPath.split('/').pop() || fontPath;
+            const fontName = `custom-${fileName.replace(/\W+/g, '-')}`;
             
-            // Invoke Rust to save font to ../backend/fonts/
-            await invoke("save_font", {
-                name: file.name,
-                data: Array.from(data)
-            });
-            
-            const url = URL.createObjectURL(file);
-            const fontName = `custom-${file.name.replace(/\W+/g, '-')}`;
-            
-            // Dynamic @font-face injection
             const style = document.createElement('style');
             style.id = `font-face-${fontName}`;
             style.innerHTML = `
                 @font-face {
                     font-family: '${fontName}';
-                    src: url('${url}');
+                    src: url('data:font/truetype;charset=utf-8;base64,${base64Data}');
                     font-weight: normal;
                     font-style: normal;
                 }
             `;
             
-            // Remove existing element of the same id if present
             const existing = document.getElementById(style.id);
             if (existing) {
                 existing.remove();
             }
             document.head.appendChild(style);
-            
-            customFont = fontName;
-            customFontFile = file.name;
-            customFontName = file.name;
+            loadedFonts.add(fontPath);
         } catch (err) {
-            console.error("Failed to load font:", err);
-            alert("Failed to load custom font: " + err);
+            console.error("Failed to load font background-wise:", err);
+        }
+    }
+
+    $: if (customFontFile && customFontFile.includes("/")) {
+        ensureFontLoaded(customFontFile);
+    }
+
+    async function selectCustomFont() {
+        pushUndoSnapshot(true);
+        try {
+            const selected = await open({
+                multiple: false,
+                directory: false,
+                filters: [
+                    {
+                        name: "Font",
+                        extensions: ["ttf", "otf", "woff", "woff2"],
+                    },
+                ],
+            });
+            
+            if (selected && typeof selected === "string") {
+                const base64Data = await invoke<string>("get_font_base64", { path: selected });
+                
+                const fileName = selected.split('/').pop() || selected;
+                const fontName = `custom-${fileName.replace(/\W+/g, '-')}`;
+                
+                // Dynamic @font-face injection
+                const style = document.createElement('style');
+                style.id = `font-face-${fontName}`;
+                style.innerHTML = `
+                    @font-face {
+                        font-family: '${fontName}';
+                        src: url('data:font/truetype;charset=utf-8;base64,${base64Data}');
+                        font-weight: normal;
+                        font-style: normal;
+                    }
+                `;
+                
+                const existing = document.getElementById(style.id);
+                if (existing) {
+                    existing.remove();
+                }
+                document.head.appendChild(style);
+                
+                customFont = fontName;
+                customFontFile = selected;
+                customFontName = fileName;
+            }
+        } catch (err) {
+            console.error("Failed to select font:", err);
+            alert("Failed to select custom font: " + err);
         }
     }
 
@@ -162,6 +184,7 @@
         customFontFile = "";
         customFontName = "";
     }
+
 
     function togglePicker(picker: "font" | "bg") {
         if (activePicker === picker) {
@@ -305,27 +328,20 @@
         {#if customFont}
             <div class="active-font-badge">
                 <span class="font-icon">🔤</span>
-                <span class="font-name" title={customFontName}>{customFontName}</span>
+                <span class="font-name" title={customFontFile}>{customFontName}</span>
             </div>
         {:else}
             <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
             <div 
                 class="dropzone"
-                ondragover={handleDragOver}
-                ondrop={handleDrop}
+                onclick={selectCustomFont}
             >
-                <input 
-                    id="fontFileInput"
-                    type="file" 
-                    accept=".ttf,.otf,.woff,.woff2" 
-                    onchange={handleFontFile} 
-                    class="hidden-file-input"
-                />
-                <label for="fontFileInput" class="dropzone-label">
+                <div class="dropzone-label">
                     <span class="upload-icon">📥</span>
-                    <span class="dropzone-title">Upload Custom Font</span>
-                    <span class="dropzone-subtitle">Drag & drop or browse (.ttf, .otf, .woff)</span>
-                </label>
+                    <span class="dropzone-title">Select Custom Font</span>
+                    <span class="dropzone-subtitle">Click to choose font file (.ttf, .otf, .woff)</span>
+                </div>
             </div>
         {/if}
     </div>
