@@ -46,6 +46,8 @@ pub struct RenderSubtitle {
     pub sub_x: Option<f32>,
     pub sub_y: Option<f32>,
     pub sub_width: Option<f32>,
+    pub outline_color: Option<String>,
+    pub outline_width: Option<f32>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -60,6 +62,8 @@ pub struct RenderStyle {
     pub background_opacity: Option<f32>,
     pub animation_type: Option<String>,
     pub animation_speed: Option<f32>,
+    pub outline_color: Option<String>,
+    pub outline_width: Option<f32>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -88,6 +92,8 @@ struct RenderStateStyle {
     backgroundOpacity: f32,
     animationType: String,
     animationSpeed: f32,
+    outlineColor: String,
+    outlineWidth: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -646,6 +652,15 @@ async fn render_video(app: AppHandle, config: RenderConfig) -> Result<PyResponse
                         .animation_speed
                         .or(config.style.animation_speed)
                         .unwrap_or(200.0),
+                    outlineColor: sub
+                        .outline_color
+                        .clone()
+                        .or(config.style.outline_color.clone())
+                        .unwrap_or_else(|| "#000000".to_string()),
+                    outlineWidth: sub
+                        .outline_width
+                        .or(config.style.outline_width)
+                        .unwrap_or(0.0),
                 };
 
                 let sub_x = sub.sub_x.or(pos.sub_x).unwrap_or(50.0);

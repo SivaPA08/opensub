@@ -86,6 +86,8 @@ export interface Subtitle {
     animationType?: string;
     animationSpeed?: number;
     track?: number;
+    outlineColor?: string;
+    outlineWidth?: number;
 }
 export const subtitle = writable<Subtitle[]>([]);
 export const selectedSubtitleIndices = writable<number[]>([]);
@@ -122,6 +124,8 @@ export type SubtitleAnimationStyle = {
     backgroundOpacity: number; // 0 to 1
     animationType?: string;
     animationSpeed?: number;
+    outlineColor?: string;
+    outlineWidth?: number;
 };
 
 export const subtitleAnimation = writable<SubtitleAnimationStyle>({
@@ -133,7 +137,9 @@ export const subtitleAnimation = writable<SubtitleAnimationStyle>({
     fontOpacity: 1.0,
     backgroundOpacity: 0.85,
     animationType: 'none',
-    animationSpeed: 200
+    animationSpeed: 200,
+    outlineColor: '#000000',
+    outlineWidth: 0
 });
 
 export const selectedModel = writable<string>("small"); // Default model is small

@@ -120,6 +120,8 @@
             backgroundOpacity: sub.backgroundOpacity !== undefined ? sub.backgroundOpacity : ($subtitleAnimation.backgroundOpacity ?? 0.85),
             animationType: sub.animationType !== undefined ? sub.animationType : ($subtitleAnimation.animationType ?? 'none'),
             animationSpeed: sub.animationSpeed !== undefined ? sub.animationSpeed : ($subtitleAnimation.animationSpeed ?? 200),
+            outlineColor: sub.outlineColor !== undefined ? sub.outlineColor : ($subtitleAnimation.outlineColor ?? '#000000'),
+            outlineWidth: sub.outlineWidth !== undefined ? sub.outlineWidth : ($subtitleAnimation.outlineWidth ?? 0),
         };
     }
 
@@ -440,6 +442,15 @@
                     containerHeight,
                 });
             };
+            const resolveVideoOutlineWidth = (previewOutlineWidth: number | undefined) => {
+                if (previewOutlineWidth === undefined) return undefined;
+                return toVideoFontSize(previewOutlineWidth, {
+                    videoWidth,
+                    videoHeight,
+                    containerWidth,
+                    containerHeight,
+                });
+            };
 
             const config = {
                 input_path: $videoPath,
@@ -460,6 +471,8 @@
                     backgroundOpacity: s.backgroundOpacity,
                     animationType: s.animationType,
                     animationSpeed: s.animationSpeed,
+                    outlineColor: s.outlineColor,
+                    outlineWidth: resolveVideoOutlineWidth(s.outlineWidth),
                 })),
                 style: {
                     fontSize: toVideoFontSize($subtitleAnimation.fontSize, {
@@ -476,6 +489,13 @@
                     backgroundOpacity: $subtitleAnimation.backgroundOpacity,
                     animationType: $subtitleAnimation.animationType ?? 'none',
                     animationSpeed: $subtitleAnimation.animationSpeed ?? 200,
+                    outlineColor: $subtitleAnimation.outlineColor,
+                    outlineWidth: toVideoFontSize($subtitleAnimation.outlineWidth ?? 0, {
+                        videoWidth,
+                        videoHeight,
+                        containerWidth,
+                        containerHeight,
+                    }),
                 },
                 position: {
                     subX: subX,
@@ -710,7 +730,7 @@
                                     style="font-size: {style.fontSize}px; color: {hexOrRgbToRgba(
                                         style.fontColor,
                                         style.fontOpacity,
-                                    )}; font-family: {style.customFont};"
+                                    )}; font-family: {style.customFont}; -webkit-text-stroke: {style.outlineWidth}px {hexOrRgbToRgba(style.outlineColor, style.fontOpacity)}; paint-order: stroke fill;"
                                     value={sub.content}
                                     on:input={(e) =>
                                         updateSubtitleText(
@@ -738,7 +758,7 @@
                                     style="font-size: {style.fontSize}px; color: {hexOrRgbToRgba(
                                         style.fontColor,
                                         style.fontOpacity,
-                                    )}; font-family: {style.customFont};"
+                                    )}; font-family: {style.customFont}; -webkit-text-stroke: {style.outlineWidth}px {hexOrRgbToRgba(style.outlineColor, style.fontOpacity)}; paint-order: stroke fill;"
                                     on:dblclick={() => {
                                         textEditUndoRecorded = false;
                                         isEditingText = true;

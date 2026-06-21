@@ -22,6 +22,8 @@
         backgroundOpacity: number;
         animationType: string;
         animationSpeed: number;
+        outlineColor: string;
+        outlineWidth: number;
     };
 
     let activeSubtitles: RenderSubtitle[] = [];
@@ -78,6 +80,8 @@
                     backgroundOpacity?: number;
                     animationType?: string;
                     animationSpeed?: number;
+                    outlineColor?: string;
+                    outlineWidth?: number;
                 };
             }>;
             content?: string;
@@ -95,6 +99,8 @@
                 backgroundOpacity?: number;
                 animationType?: string;
                 animationSpeed?: number;
+                outlineColor?: string;
+                outlineWidth?: number;
             };
             customFontBase64?: string;
             customFontName?: string;
@@ -127,6 +133,11 @@
                             s.animationSpeed !== undefined
                                 ? s.animationSpeed
                                 : 200,
+                        outlineColor: s.outlineColor || "#000000",
+                        outlineWidth:
+                            s.outlineWidth !== undefined
+                                ? s.outlineWidth
+                                : 0,
                     };
                 });
             } else if (state.content !== undefined) {
@@ -159,6 +170,11 @@
                             s.animationSpeed !== undefined
                                 ? s.animationSpeed
                                 : 200,
+                        outlineColor: s.outlineColor || "#000000",
+                        outlineWidth:
+                            s.outlineWidth !== undefined
+                                ? s.outlineWidth
+                                : 0,
                     },
                 ];
             } else if (state.content === "") {
@@ -266,6 +282,8 @@
                             font-family: {sub.customFont ||
                             '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'};
                             line-height: 1.4;
+                            -webkit-text-stroke: {sub.outlineWidth}px {hexOrRgbToRgba(sub.outlineColor, sub.fontOpacity)};
+                            paint-order: stroke fill;
                         "
                     >
                         {#if sub.animationType === "split-text"}

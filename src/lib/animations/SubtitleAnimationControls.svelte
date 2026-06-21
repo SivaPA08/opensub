@@ -16,9 +16,11 @@
     let fontOpacity = $subtitleAnimation.fontOpacity ?? 1.0;
     let backgroundOpacity = $subtitleAnimation.backgroundOpacity ?? 0.85;
     let customFontName = $subtitleAnimation.customFontFile || "";
+    let outlineColor = $subtitleAnimation.outlineColor ?? "#000000";
+    let outlineWidth = $subtitleAnimation.outlineWidth ?? 0;
 
-    // Track active picker sections: "font" | "bg" | null
-    let activePicker: "font" | "bg" | null = null;
+    // Track active picker sections: "font" | "bg" | "outline" | null
+    let activePicker: "font" | "bg" | "outline" | null = null;
 
     let lastInspectedIndex = -2;
     let suppressApply = false;
@@ -39,6 +41,8 @@
             fontOpacity = sub.fontOpacity !== undefined ? sub.fontOpacity : ($subtitleAnimation.fontOpacity ?? 1.0);
             backgroundOpacity = sub.backgroundOpacity !== undefined ? sub.backgroundOpacity : ($subtitleAnimation.backgroundOpacity ?? 0.85);
             customFontName = customFontFile;
+            outlineColor = sub.outlineColor !== undefined ? sub.outlineColor : ($subtitleAnimation.outlineColor ?? "#000000");
+            outlineWidth = sub.outlineWidth !== undefined ? sub.outlineWidth : ($subtitleAnimation.outlineWidth ?? 0);
         } else {
             fontSize = $subtitleAnimation.fontSize;
             fontColor = $subtitleAnimation.fontColor;
@@ -48,6 +52,8 @@
             fontOpacity = $subtitleAnimation.fontOpacity ?? 1.0;
             backgroundOpacity = $subtitleAnimation.backgroundOpacity ?? 0.85;
             customFontName = customFontFile;
+            outlineColor = $subtitleAnimation.outlineColor ?? "#000000";
+            outlineWidth = $subtitleAnimation.outlineWidth ?? 0;
         }
         tick().then(() => { suppressApply = false; });
     }
@@ -62,7 +68,9 @@
                 customFont,
                 customFontFile,
                 fontOpacity,
-                backgroundOpacity
+                backgroundOpacity,
+                outlineColor,
+                outlineWidth
             }, { recordUndo: false });
         }
     }
@@ -78,6 +86,8 @@
                 customFontFile,
                 fontOpacity,
                 backgroundOpacity,
+                outlineColor,
+                outlineWidth,
                 animationType: $subtitleAnimation.animationType,
                 animationSpeed: $subtitleAnimation.animationSpeed
             });
@@ -154,7 +164,7 @@
     }
 
 
-    function togglePicker(picker: "font" | "bg") {
+    function togglePicker(picker: "font" | "bg" | "outline") {
         if (activePicker === picker) {
             activePicker = null;
         } else {
@@ -314,6 +324,47 @@
         {/if}
     </div>
 
+    <!-- Text Outline Section -->
+    <div class="control-card">
+        <div class="card-header">
+            <span class="card-label">Text Outline</span>
+            <!-- Interactive Color Swatch -->
+            <!-- svelte-ignore a11y_click_events_have_key_events -->
+            <!-- svelte-ignore a11y_no_static_element_interactions -->
+            <div 
+                class="color-swatch-badge {activePicker === 'outline' ? 'active' : ''}" 
+                onclick={() => togglePicker('outline')}
+            >
+                <span class="swatch" style="background-color: {outlineColor};"></span>
+                <span class="color-hex">{outlineColor}</span>
+            </div>
+        </div>
+
+        {#if activePicker === 'outline'}
+            <div class="picker-drawer animate-slide-down">
+                <ColorPicker 
+                    value={outlineColor} 
+                    onChange={(color) => outlineColor = color} 
+                />
+            </div>
+        {/if}
+
+        <div class="slider-row-sub">
+            <label for="outlineWidthInput" class="sub-label">Thickness</label>
+            <input 
+                id="outlineWidthInput" 
+                type="range" 
+                min="0" 
+                max="10" 
+                step="0.5" 
+                bind:value={outlineWidth} 
+                class="premium-slider"
+                onmousedown={() => pushUndoSnapshot(true)}
+            />
+            <span class="sub-value-badge">{outlineWidth}px</span>
+        </div>
+    </div>
+
     <!-- Live Preview Display -->
     <div class="live-preview-box">
         <div class="preview-title">Live Preview</div>
@@ -323,6 +374,8 @@
                 font-family: {customFont || 'inherit'};
                 font-size: {fontSize * 0.8}px;
                 color: {hexOrRgbToRgba(fontColor, fontOpacity)};
+                -webkit-text-stroke: {outlineWidth}px {hexOrRgbToRgba(outlineColor, fontOpacity)};
+                paint-order: stroke fill;
                 -webkit-backdrop-filter: blur({8 * backgroundOpacity}px);
                 backdrop-filter: blur({8 * backgroundOpacity}px);
                 border: 1px solid rgba(255, 255, 255, {0.1 * backgroundOpacity});
