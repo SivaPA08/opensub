@@ -2,6 +2,9 @@
 
 OpenSub is an open-source desktop application for generating, editing, and styling subtitles with a visual editor.
 
+<img width="1918" height="1018" alt="ui" src="https://github.com/user-attachments/assets/16ac5afa-e3ea-4a59-8491-403106c9328c" />
+
+
 ## Features
 
 - Subtitle creation and editing
